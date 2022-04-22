@@ -1,9 +1,28 @@
 import re
+import sys
 from glob import glob
 
-_r_ds        = re.compile('(mc16_13TeV|mc20_13TeV|mc21_13p6TeV|data15_13TeV|data16_13TeV|data17_13TeV|data18_13TeV|data22_13p6TeV|efake15|efake16|efake17|efake18|jfake15|jfake16|jfake17|jfake18)\.([0-9]*)\.(.*)')
-_r_period_ds = re.compile('(mc16_13TeV|mc20_13TeV|mc21_13p6TeV|data15_13TeV|data16_13TeV|data17_13TeV|data18_13TeV|data22_13p6TeV|efake15|efake16|efake17|efake18|jfake15|jfake16|jfake17|jfake18|smr15|smr16|smr17|smr18)\.(period[A-Z])\.(.*)')
 
+
+# _r_ds        = re.compile(f'({_mc_str}|{_data_str}|{_fakes_str})\.([0-9]*)\.(.*)')
+# _r_period_ds = re.compile(f'({_mc_str}|{_data_str}|{_fakes_str}|{_smr_str})\.(period[A-Z])\.(.*)')
+
+
+_smr_str    = 'smr15|smr16|smr17|smr18'
+_regex_datatype = [
+    'mc16_13TeV|mc20_13TeV|mc21_13p6TeV|mc16|mc20|mc21'
+    'data15|data16|data17|data18|data22|data15_13TeV|data16_13TeV|data17_13TeV|data18_13TeV|data22_13p6TeV'
+    'efake15|efake16|efake17|efake18|jfake15|jfake16|jfake17|jfake18'
+]
+
+_regex_end     = '([0-9]*)\.(.*)'
+_regex_end_per = '(period[A-Z])\.(.*)'
+
+_regex_start = '|'.join(e for e in _regex_datatype)
+_period_regex_start = '|'.join(e for e in [_regex_start, _smr_str])
+
+r_ds     = re.compile(f'({_regex_start})\.{_regex_end}')
+r_ds_per = re.compile(f'({_period_regex_start})\.{_regex_end_per}')
 
 #===================================================================================================
 # TODO: implement this function
@@ -13,7 +32,7 @@ _r_period_ds = re.compile('(mc16_13TeV|mc20_13TeV|mc21_13p6TeV|data15_13TeV|data
 #===================================================================================================
 
 #===================================================================================================
-def _find_path(project, dsid, short_name, paths, version, mc_campaign):
+def _find_path(samples_paths, project=None, dsid=None, short_name=None, version=None, mc_campaign=None, full_ds=None):
     """Get the path with the input mini-ntuples
 
     Args:
@@ -28,16 +47,17 @@ def _find_path(project, dsid, short_name, paths, version, mc_campaign):
     """
     # set versions number.
     # v1, v2 = (int(v) for v in version.split('_'))
-
-    if project.startswith('mc') and mc_campaign is not None:
+    if full_ds:
+        guess_path = full_ds
+    elif project.startswith('mc') and mc_campaign is not None:
         guess_path = f'v{version}/*{project}.{dsid}.{short_name}.mini.{mc_campaign}.p*.v{version}_output*'
     else:
         guess_path = f'v{version}/user.*.{project}.{dsid}.{short_name}.mini.p*.v{version}_output*'
 
-    for mini_dir in paths:
+    for mini_dir in samples_paths:
         full_guess_path = f'{mini_dir}/{guess_path}'
         try:
-            paths = glob.glob(full_guess_path)
+            paths = glob(full_guess_path)
             if paths:
                 # TODO: sort by ptag and choose the latest
                 return paths[0]
@@ -76,7 +96,7 @@ def _get_dsnames(name, samples, version):
 #===================================================================================================
 
 #===================================================================================================
-def get_datasets(name, paths, samples, version=None, ignore_missing=True, mc_campaign=None):
+def get_datasets(name, paths, samples, version=None, ignore_missing=True, mc_campaign=None, extra_regex=None):
     """Retrieve information from the datasets with name 'name'.
 
     Args:
@@ -99,21 +119,35 @@ def get_datasets(name, paths, samples, version=None, ignore_missing=True, mc_cam
     if not dsnames:
         raise Exception('Sample %s not found in samples dictionary' % name)
 
+    if extra_regex:
+        r_extra = re.compile(extra_regex)
+
     # loop over the dataset names
     datasets = []
     for ds in dsnames:
         try:
-            m = _r_ds.match(ds)
-            project, dsid, short_name = m.group(1), m.group(2), m.group(3)
+            if extra_regex:
+                m = r_extra.match(ds)
+                full_ds = m.group(0)
+            else:
+                m = r_ds.match(ds)
+                project, dsid, short_name = m.group(1), m.group(2), m.group(3)
         except:
             try:
-                m = _r_period_ds.match(ds)
-                project, dsid, short_name = m.group(1), m.group(2), m.group(3)
+                if extra_regex:
+                    m = r_extra.match(ds)
+                    full_ds = m.group(0)
+                else:
+                    m = r_ds_per.match(ds)
+                    project, dsid, short_name = m.group(1), m.group(2), m.group(3)
             except:
                 raise Exception(ds)
 
         # get path of the sample
-        path = _find_path(project, dsid, short_name, paths, version, mc_campaign)
+        if extra_regex:
+            path = _find_path(paths, full_ds=full_ds)
+        else:
+            path = _find_path(paths, project, dsid, short_name, version, mc_campaign)
 
         if not path:
             if ignore_missing:
@@ -121,15 +155,21 @@ def get_datasets(name, paths, samples, version=None, ignore_missing=True, mc_cam
             else:
                 raise Exception(f'File not found for ds {ds} with campaign {mc_campaign}. Using version {version}')
 
-        dataset = {
-            'name'       : name,
-            'project'    : project,
-            'mc_campaign': mc_campaign,
-            'dsid'       : dsid,
-            'short_name' : short_name,
-            'path'       : path,
+        if extra_regex:
+            dataset = {
+                'name': name,
+                'path': path
             }
-
-        datasets.append(dataset)
+        else:
+            dataset = {
+                'name'       : name,
+                'project'    : project,
+                'mc_campaign': mc_campaign,
+                'dsid'       : dsid,
+                'short_name' : short_name,
+                'path'       : path,
+            }
+        
+        datasets.append(dataset)        
     return datasets
 #===================================================================================================

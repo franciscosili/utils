@@ -39,11 +39,12 @@ lumi_dict = {
 
 class histogram_getter:
     #===============================================================================================
-    def __init__(self, ana_rel, version, year,
-                 paths, samples, wg,
-                 regions, selections, binning,
+    def __init__(self, ana_rel, year,
+                 paths, samples,
+                 binning, regions=None, selections=None,
+                 version=None, wg_label=None,
                  weights_strings=None, tree_name=None,
-                 show_progress=True, add_overflow_bin=False, scale=True, lumi=None,
+                 add_overflow_bin=False, scale=True, lumi=None,
                  use_skim=False, use_lumiw=True, use_mcw=True, use_sfw=True, use_purw=True,
                  use_mcveto=True, use_phjet_w=False,
                  slices=False,
@@ -58,13 +59,11 @@ class histogram_getter:
         self.version          = version
         self.year             = year
         # samples and paths info
-        self.paths            = paths
-        self.samples          = samples
-        self.wg               = wg
+        
+        self.wg_label         = wg_label
         # custom weights strings
         self.weights_strings  = weights_strings
         # optional extra parameters
-        self.show_progress    = show_progress
         self.add_overflow_bin = add_overflow_bin
         self.scale            = scale
         self.lumi             = lumi
@@ -80,15 +79,15 @@ class histogram_getter:
         self.seed_selection   = seed_selection
         self.ignore_missing   = ignore_missing
         self.debug            = debug
-        
-        # self.variables        = variables if isinstance(variables, list) else [variables,]
-        self.regions          = regions
-        self.selections       = selections
-        self.preselection     = preselection
-        self.binning          = binning
-        
+
+        # tree name
+        if tree_name is not None:
+            self.tree_name = tree_name
+        else:
+            self.tree_name = 'smini' if self.use_skim else 'mini'        
+
         # dataset year
-        self.dataset_year     = year
+        self.dataset_year = year
         if self.dataset_year in ('2015', '2016', '2015+2016'):
             self.run = 2
             self.mc_campaign = 'mc16a' if self.ana_rel < 22 else 'mc20a'
@@ -101,46 +100,46 @@ class histogram_getter:
         elif self.dataset_year == '2022':
             self.run = 3
             self.mc_campaign = 'mc21a'
-        
-        # tree name
-        if tree_name is not None:
-            self.tree_name = tree_name
-        else:
-            self.tree_name = 'smini' if self.use_skim else 'mini'
-        
+
         print('The configuration for histogram_getter is:')
         for var_name, var_val in vars(self).items():
             print(f'  {var_name:17}= {var_val}')
-        
-        
+
+        self.paths            = paths
+        self.samples          = samples
+        self.regions          = regions
+        self.selections       = selections
+        self.preselection     = preselection
+        self.binning          = binning
+
+
         if systs_module:
             import systs_module as systematics_
             self.systematics = systematics_
-        
-        RT.gInterpreter.Declare(open(os.environ['PJ_ANALYSIS'] + '/lib/variables.cxx').read())
-        
+
+        # RT.gInterpreter.Declare(open(os.environ['snip_path'] + '/variables.cxx').read())
+
         return
     #===============================================================================================
 
     #===============================================================================================
     def _get_multi_histograms(self, name, path, is_mc, lumi, regions, selections, variables,
-                              systematics=['Nom',], binning=None, dsid_str=None):
+                              systematics=['Nom', ], binning=None, dsid_str=None):
         """
         get histogram for a given sample (ds) and year
         """
-        is_fake  = ('efake' in name or 'jfake' in name)
+        is_fake = ('efake' in name or 'jfake' in name)
         is_phjet = ('photonjet' in name)
-        is_smr   = ('smr' in name)
+        is_smr = ('smr' in name)
 
+        variables  = variables if isinstance(variables, list) else [variables, ]
+        regions    = regions if isinstance(regions, list) else [regions, ]
+        selections = selections if isinstance(selections, list) else [selections, ]
 
-        variables   = variables  if isinstance(variables, list) else [variables,]
-        regions     = regions    if isinstance(regions, list) else [regions,]
-        selections  = selections if isinstance(selections, list) else [selections,]
-
-        #------------
+        # ------------
         # File/Chain
-        #------------
-            
+        # ------------
+
         # open tree or chain, depending if the path is a directory or if it is a single file
         if os.path.isdir(path):
             tree = RT.TChain(self.tree_name)
@@ -153,32 +152,28 @@ class histogram_getter:
             tree = file_.Get(self.tree_name)
 
         # Lumi weight is the same for all histograms
-        if is_mc and self.use_lumiw:
-            if self.weights_strings is not None:
-                if 'lumi_w' in self.weights_strings:
-                    lumi_weight = self.weights_strings['lumi_w']
+        if is_mc and self.use_lumiw and not self.weights_strings:
+            if self.use_skim:
+                lumi_weight = 'weight_xs*%.2f' % lumi
+            elif dsid_str:
+                lumi_weight = '%s' % get_lumi_weight(path, int(dsid_str), lumi)
             else:
-                if self.use_skim:
-                    lumi_weight = 'weight_xs*%.2f' % lumi
-                else:
-                    lumi_weight = '%s' % get_lumi_weight(path, int(dsid_str), lumi)
+                lumi_weight = ''
 
-        #----------------------------------------------
+        # ----------------------------------------------
         # Create histograms and "tuples" for MultiDraw
-        #----------------------------------------------
-        draw_list  = []
+        # ----------------------------------------------
+        draw_list = []
         histograms = []
-        
 
         # get a list of selections or regions
         if regions and selections:
             # check if same size ...
             pass
         elif regions and not selections:
-            selections = [ getattr(self.regions, reg) for reg in regions ]
+            selections = [self.regions[reg] for reg in regions]
         elif selections and not regions:
-            regions    = [ 'R%i' % isel for isel in range(len(selections)) ]
-
+            regions    = ['R%i' % isel for isel in range(len(selections))]
 
         # loop over both regions and selections simultaneously
         for region, selection in zip(regions, selections):
@@ -204,8 +199,10 @@ class histogram_getter:
                     # name to avoid the ROOT warning, not used
                     if self.use_skim:
                         hname = f'h__{name}__{systname}_{region}_obs_{get_escaped_variable(variable)}'
-                    else:
+                    elif dsid_str:
                         hname = f'h__{dsid_str}__{systname}_{region}_obs_{get_escaped_variable(variable)}'
+                    else:
+                        hname = f'h__{name}_{systname}_{region}_obs_{get_escaped_variable(variable)}'
 
                     # in case we give a 2D variable name, create a 2D histogram
                     if is_2d_variable(variable):
@@ -219,66 +216,60 @@ class histogram_getter:
                         else:
                             htemp = RT.TH1D(hname, hname, int(binning[0]), binning[1], binning[2])
                         htemp.Sumw2()
-                    
+
                     # ------- SETUP SELECTIONS
-                    ## MC veto
+                    # MC veto
                     if is_mc and self.use_mcveto:
-                        if self.wg is None:
+                        if self.wg_label is None:
                             if _selection:
                                 _selection = '%s && mcveto==0' % _selection
                             else:
                                 _selection = 'mcveto==0'
 
-                        if self.wg == 'PID_RZ':
-                            truth_pt = 'ph.truth_pt'
-                        elif self.wg == 'PID_SP':
-                            truth_pt = 'y_truth_pt'
-                        else:
-                            truth_pt = 'ph_truth_pt[0]'
                         # skim pt slices
                         if not self.use_skim:
                             dsid = int(dsid_str)
                             # sherpa
                             if dsid in (361042, 361043, 361044, 364543):
-                                _selection += f'&& {truth_pt}>70. && {truth_pt}<140.'
+                                _selection += f'&& ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
                             elif dsid in (361045, 361046, 361047, 364544):
-                                _selection += f'&& {truth_pt}>140. && {truth_pt}<280.'
+                                _selection += f'&& ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
                             elif dsid in (361048, 361049, 361050, 364545):
-                                _selection += f'&& {truth_pt}>280. && {truth_pt}<500.'
+                                _selection += f'&& ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
                             elif dsid in (361051, 361052, 361053, 364546):
-                                _selection += f'&& {truth_pt}>500. && {truth_pt}<1000.'
+                                _selection += f'&& ph_truth_pt[0]>500. && ph_truth_pt[0]<1000.'
                             elif dsid in (361054, 361055, 361056, 361057, 361058, 361059, 364547):
-                                _selection += f'&& {truth_pt}>1000.'
+                                _selection += f'&& ph_truth_pt[0]>1000.'
                             # pythia
                             elif dsid in (800662, 800676):
-                                _selection += f'&& {truth_pt}>70. && {truth_pt}<140.'
+                                _selection += f'&& ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
                             elif dsid in (800663, 800677):
-                                _selection += f'&& {truth_pt}>140. && {truth_pt}<280.'
+                                _selection += f'&& ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
                             elif dsid in (800664, 800678):
-                                _selection += f'&& {truth_pt}>280. && {truth_pt}<500.'
+                                _selection += f'&& ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
                             elif dsid in (800665, 800679):
-                                _selection += f'&& {truth_pt}>500. && {truth_pt}<800.'
+                                _selection += f'&& ph_truth_pt[0]>500. && ph_truth_pt[0]<800.'
                             elif dsid in (800666, 800680):
-                                _selection += f'&& {truth_pt}>800. && {truth_pt}<1000.'
+                                _selection += f'&& ph_truth_pt[0]>800. && ph_truth_pt[0]<1000.'
                             elif dsid in (800667, 800681):
-                                _selection += f'&& {truth_pt}>1000. && {truth_pt}<1500.'
+                                _selection += f'&& ph_truth_pt[0]>1000. && ph_truth_pt[0]<1500.'
                             elif dsid in (800668, 800682):
-                                _selection += f'&& {truth_pt}>1500. && {truth_pt}<2000.'
+                                _selection += f'&& ph_truth_pt[0]>1500. && ph_truth_pt[0]<2000.'
                             elif dsid in (800683,):
-                                _selection += f'&& {truth_pt}>2000.'
+                                _selection += f'&& ph_truth_pt[0]>2000.'
                             elif dsid in (800669,):
-                                _selection += f'&& {truth_pt}>2000. && {truth_pt}<2500.'
+                                _selection += f'&& ph_truth_pt[0]>2000. && ph_truth_pt[0]<2500.'
                             elif dsid in (800670,):
-                                _selection += f'&& {truth_pt}>2500. && {truth_pt}<3000.'
+                                _selection += f'&& ph_truth_pt[0]>2500. && ph_truth_pt[0]<3000.'
                             elif dsid in (800671,):
-                                _selection += f'&& {truth_pt}>3000.'
+                                _selection += f'&& ph_truth_pt[0]>3000.'
 
                     if is_smr:
                         _selection += '&& smeared==1 && %s' % self.seed_selection
 
                     # Remove variable from selection if n-1
                     if self.remove_var_cut and variable in _selection and not variable == 'cuts':
-                        _selection = '&&'.join([ cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable ])
+                        _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable])
 
                     # if do_remove_var and (':' in variable):
                     #     if varx in selection:
@@ -286,8 +277,7 @@ class histogram_getter:
                     #     if vary in selection:
                     #         selection = '&&'.join([ cut for cut in selection.split('&&') if not split_cut(cut)[0] == vary ])
 
-
-                    ## change selection and variable for systematics
+                    # change selection and variable for systematics
                     if syst != 'Nom' and self.systematics.affects_kinematics(syst):
                         for var in self.systematics.get_affected_variables(syst):
                             _selection = replace_var(_selection, var, '%s_%s' % (var, syst))
@@ -300,7 +290,12 @@ class histogram_getter:
                     if is_mc:
                         # lumi weight
                         if self.use_lumiw:
-                            w_list.append('%s' % lumi_weight)
+                            if not self.weights_strings and lumi_weight is not '':
+                                w_list.append('%s' % lumi_weight)
+                            else:
+                                if 'lumi_w' in self.weights_strings:
+                                    lumi_weight = self.weights_strings['lumi_w']
+                                    w_list.append('%s' % lumi_weight)
 
                         # mc weight
                         if self.use_mcw:
@@ -334,7 +329,7 @@ class histogram_getter:
                         # photonjet MET reweighting (not used for the moment)
                         if self.use_phjet_w and is_phjet:
                             w_list.append('weight_ff')
-                            
+
                         # SUSY EWK BR re-weighting
                         # if self.ggm_br:
                         #     w_list.append(get_GGM_model_weight(*ggm_br))
@@ -346,7 +341,6 @@ class histogram_getter:
                             w_list.append('weight_ff_dn')
                         elif syst == 'EFAKE_SYST__1up' or syst == 'JFAKE_SYST__1up':
                             w_list.append('weight_ff_up')
-
 
                     w_str = '*'.join(w_list) if self.scale else ''
 
@@ -360,7 +354,6 @@ class histogram_getter:
                         varexp = w_str
 
                     histograms.append(htemp)
-                    
 
                     if variable == 'cuts':
                         draw_list.append((hname, '1', varexp))
@@ -375,7 +368,7 @@ class histogram_getter:
 
             variable = '%s:%s' % (vary, varx)
             tree.Project(hname, variable, selection)
-        elif len(draw_list) ==  1:
+        elif len(draw_list) == 1:
             hname, variable, selection = draw_list[0]
             if self.debug:
                 print(hname, variable, selection)
@@ -390,7 +383,7 @@ class histogram_getter:
 
         if os.path.isdir(path):
             tree.Reset()
-            #tree.Delete()
+            # tree.Delete()
         else:
             file_.Close()
 
@@ -405,18 +398,18 @@ class histogram_getter:
     #===============================================================================================
 
     #===============================================================================================
-    def get_histograms(self, sample, systematics, binning, regions, selections, variables, dataset=None):
-    
+    def get_histograms(self, sample, systematics, binning, regions, selections, variables, dataset=None, extra_regex=None):
+
         # dataset: 2015, 2016, 2017, 2018, or combinations with "+"
         # 'Run2': 2015+2016+2017+2018
-        if not dataset: dataset_year = self.year
-        
-        if dataset_year == 'Run2':
-            dataset_year = '2015+2016+2017+2018'
+        if not dataset:
+            dataset_year = self.year
+            if dataset_year == 'Run2':
+                dataset_year = '2015+2016+2017+2018'
 
         is_mc = (not 'data' in sample and not 'efake' in sample and not 'jfake' in sample and not 'smr' in sample)
 
-        if '+' in dataset_year and not (is_mc and dataset_year=='2015+2016'):
+        if '+' in dataset_year and not (is_mc and dataset_year == '2015+2016'):
             if self.year: del self.year
 
             dataset_years = dataset_year.split('+')
@@ -425,17 +418,22 @@ class histogram_getter:
                 dataset_years.remove('2016')
                 dataset_years.insert(0, '2015+2016')
 
-            return sum_histograms( [self.get_histograms(sample, systematics, binning, y) for y in dataset_years] )
+                _tmp_list = []
+                for y in dataset_years:
+                    _tmp_list.append(
+                        self.get_histograms(sample, systematics, binning, regions, selections,
+                                            variables, y, extra_regex)
+                    )
+            return sum_histograms(_tmp_list)
 
         # Data type/MC campaign
         if sample in ['data', 'efake', 'jfake', 'smr']:
             sample = sample + dataset_year[-2:]
-    
+
         # lumi
         lumi = 0.
         if is_mc:
             lumi = get_lumi(dataset_year)
-
 
         if self.use_skim:
             skim_dict = {
@@ -454,26 +452,28 @@ class histogram_getter:
             else:
                 histograms = self.get_histograms_from_skim(sample, systematics, binning, is_mc, lumi,
                                                            regions, selections, variables)
-        
+
         else:
             datasets = get_datasets(sample, self.paths, self.samples, self.version,
-                                    self.ignore_missing, self.mc_campaign)
-            
+                                    self.ignore_missing, self.mc_campaign, extra_regex)
+
             histograms = []
             if self.slices and is_mc:
                 histograms_slices = {}
 
             name_to_show = f'{sample}/{self.mc_campaign}' if is_mc else sample
-            # if self.show_progress:
-            #     print_progressbar(name_to_show, len(datasets), 0)
 
             for ds in tqdm(datasets, desc=name_to_show):
+                try:
+                    dsid = ds['dsid']
+                except KeyError:
+                    dsid = None
                 histograms_ds = self._get_multi_histograms(sample, ds['path'], is_mc, lumi, regions,
-                                                           selections, variables, dsid_str=ds['dsid'])
-                
+                                                           selections, variables, dsid_str=dsid)
+
                 if self.slices and is_mc:
                     if len(histograms_ds) == 1: histograms_slices[ds['short_name']] = histograms_ds[0]
-                
+
                 if not histograms:
                     for hist in histograms_ds:
                         histograms.append(hist.Clone())
@@ -481,15 +481,12 @@ class histogram_getter:
                     for hall, hnew in zip(histograms, histograms_ds):
                         hall.Add(hnew, 1)
 
-                # if self.show_progress:
-                #     print_progressbar(name_to_show, len(datasets), ids+1)
-
         # Fix histogram name and add oflow bin
         for hist in histograms:
             fix_histogram_name(hist, sample)
             if self.add_overflow_bin:
                 histogram_add_overflow_bin(hist)
-        
+
         if self.slices and is_mc:
             for hist in histograms_slices.values():
                 fix_histogram_name(hist, sample)
@@ -499,26 +496,28 @@ class histogram_getter:
         else:
             return histograms
     #===============================================================================================
-    
+
     #===============================================================================================
-    def get_histogram(self, sample, region=None, selection=None, variable=None, syst='Nom', binning=None):
-        if binning: binning = [binning,]
-        
+    def get_histogram(self, sample, region=None, selection=None, variable=None, syst='Nom', binning=None, extra_regex=None):
+        if binning: binning = [binning, ]
+
         if self.slices:
-            histograms, histograms_slices = self.get_histograms(sample, [syst,], binning, region, selection, variable)
+            histograms, histograms_slices = self.get_histograms(sample, [syst, ], binning, region,
+                                                                selection, variable, extra_regex=extra_regex)
         else:
-            histograms = self.get_histograms(sample, [syst,], binning, region, selection, variable)
-        
+            histograms = self.get_histograms(sample, [syst, ], binning, region, selection, variable,
+                                             extra_regex=extra_regex)
+
         if histograms and self.slices:
             return histograms[0], histograms_slices
         elif histograms:
             return histograms[0]
         return
     #===============================================================================================
-    
+
     #===============================================================================================
     def get_events(self, sample):
-        
+
         hist  = self.get_histogram(sample)
         mean  = hist.GetBinContent(1)
         error = hist.GetBinError(1)
@@ -526,7 +525,7 @@ class histogram_getter:
 
         return Value(mean, error)
     #===============================================================================================
-    
+
     #===============================================================================================
     def get_cutflow(self, sample):
         if not self.selections:
@@ -556,14 +555,9 @@ class histogram_getter:
 
             cutflow.SetBinContent(i+1, evts.mean)
             cutflow.SetBinError(i+1, evts.error)
-        
+
         return cutflow
     #===============================================================================================
-
-
-
-
-
 
 
 #===================================================================================================
@@ -735,11 +729,6 @@ def replace_var(selection, oldvar, newvar):
 #===================================================================================================
 
 
-
-
-
-
-
 #===================================================================================================
 #===================================================================================================
 #=====================================      OTHER UTILS
@@ -754,7 +743,7 @@ def sum_histograms(histograms):
     """
 
     # fix if missing campaign and empty list
-    histograms = [ h for h in histograms if h ]
+    histograms = [h for h in histograms if h]
 
     new_histograms = []
     for hlist in zip(*histograms):
@@ -792,7 +781,7 @@ def is_2d_variable(variable):
 
 #===================================================================================================
 def get_escaped_variable(variable):
-    return variable.replace(':', '_').replace('/', '').replace('(', '').replace(')', '').replace('[','').replace(']', '')
+    return variable.replace(':', '_').replace('/', '').replace('(', '').replace(')', '').replace('[', '').replace(']', '')
 #===================================================================================================
 
 #===================================================================================================
@@ -839,12 +828,12 @@ def get_sumw(path):
         for fpath in all_files:
             f = RT.TFile.Open(fpath)
             tmp = f.Get('events')
-            sumw += tmp.GetBinContent(3) # bin 3 is the initial sumw
+            sumw += tmp.GetBinContent(3)  # bin 3 is the initial sumw
             f.Close()
     else:
         f = RT.TFile.Open(path)
         tmp = f.Get('events')
-        sumw = tmp.GetBinContent(3) # bin 3 is the initial sumw
+        sumw = tmp.GetBinContent(3)  # bin 3 is the initial sumw
         f.Close()
 
     return sumw
@@ -872,4 +861,3 @@ def get_lumi(year):
     else:
         return lumi_dict[year]
 #===================================================================================================
-
