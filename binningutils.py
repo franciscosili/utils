@@ -55,12 +55,12 @@ def get_binning(variable, binning_dict):
     if ':' in variable and not '::' in variable:
         varx, vary = variable.split(':')
 
-        binning_x = get_binning_single_variable(varx)
-        binning_y = get_binning_single_variable(vary)
+        binning_x = get_binning_single_variable(varx, binning_dict)
+        binning_y = get_binning_single_variable(vary, binning_dict)
 
         binning = binning_x + binning_y
     else:
-        binning = get_binning_single_variable(variable)
+        binning = get_binning_single_variable(variable, binning_dict)
 
     if binning is None:
         print('Not bins configured for this variable %s. Using default binning' % variable)
