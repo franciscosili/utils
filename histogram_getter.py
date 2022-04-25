@@ -6,12 +6,12 @@ from array import array
 from tqdm import tqdm
 
 import ROOT as RT
-from datasets_manager import get_datasets
-from binningutils import *
-from histutils import *
-import xsutils
-from multidraw import MultiDraw
-from rootutils import Value
+from .datasets_manager import get_datasets
+from .binningutils import *
+from .histutils import *
+from . import xsutils
+from .multidraw import MultiDraw
+from .rootutils import Value
 
 
 # from rootutils import Value
