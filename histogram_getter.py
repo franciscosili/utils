@@ -419,7 +419,8 @@ class histogram_getter:
     #===============================================================================================
 
     #===============================================================================================
-    def get_histograms(self, sample, systematics, binning, regions, selections, variables, dataset=None, extra_regex=None):
+    def get_histograms(self, sample, regions, selections, variables, systematics=None, binning=None,
+                       dataset=None, extra_regex=None):
 
         # dataset: 2015, 2016, 2017, 2018, or combinations with "+"
         # 'Run2': 2015+2016+2017+2018
@@ -442,8 +443,8 @@ class histogram_getter:
                 _tmp_list = []
                 for y in dataset_years:
                     _tmp_list.append(
-                        self.get_histograms(sample, systematics, binning, regions, selections,
-                                            variables, y, extra_regex)
+                        self.get_histograms(sample, regions, selections, variables, systematics,
+                                            binning, y, extra_regex)
                     )
             return sum_histograms(_tmp_list)
 
@@ -523,10 +524,10 @@ class histogram_getter:
         if binning: binning = [binning, ]
 
         if self.slices:
-            histograms, histograms_slices = self.get_histograms(sample, [syst, ], binning, region,
-                                                                selection, variable, extra_regex=extra_regex)
+            histograms, histograms_slices = self.get_histograms(sample, region, selection, variable,
+                                                                [syst, ], binning, extra_regex=extra_regex)
         else:
-            histograms = self.get_histograms(sample, [syst, ], binning, region, selection, variable,
+            histograms = self.get_histograms(sample, region, selection, variable, [syst, ], binning,
                                              extra_regex=extra_regex)
 
         if histograms and self.slices:
