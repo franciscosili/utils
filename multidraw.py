@@ -81,7 +81,8 @@ def MultiDraw(tree, *draw_list):
     try:
         from ROOT import MultiDraw as _MultiDraw
     except ImportError:
-        ROOT.gInterpreter.Declare(open(os.environ['PJ_ANALYSIS'] + '/lib/MultiDraw.cxx').read())
+        multi_draw_path = os.path.dirname(os.path.realpath(__file__))
+        ROOT.gInterpreter.Declare(open(f'{multi_draw_path}/MultiDraw.cxx').read())
         from ROOT import MultiDraw as _MultiDraw
 
     # Ensure that formulae are told when tree changes
