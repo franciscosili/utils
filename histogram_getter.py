@@ -193,29 +193,29 @@ class histogram_getter:
 
                     # get binning
                     if binning is None or not binning:
-                        binning = get_binning(variable, self.binning)
+                        _binning = get_binning(variable, self.binning)
                     else:
-                        binning = binning[ivariable]
+                        _binning = binning[ivariable]
 
                     # name to avoid the ROOT warning, not used
                     if self.use_skim:
-                        hname = f'h__{name}__{systname}_{region}_obs_{get_escaped_variable(variable)}'
+                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable)}'
                     elif dsid_str:
-                        hname = f'h__{dsid_str}__{systname}_{region}_obs_{get_escaped_variable(variable)}'
+                        hname = f'h___{dsid_str}___{systname}__{region}__{get_escaped_variable(variable)}'
                     else:
-                        hname = f'h__{name}_{systname}_{region}_obs_{get_escaped_variable(variable)}'
+                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable)}'
 
                     # in case we give a 2D variable name, create a 2D histogram
                     if is_2d_variable(variable):
-                        htemp = RT.TH2D(hname, hname, *binning)
+                        htemp = RT.TH2D(hname, hname, *_binning)
                         htemp.Sumw2()
                     else:
-                        if len(binning) > 3:
+                        if len(_binning) > 3:
                             # if nominal_width is not None:
                             #     fix_events_by_interval = True
-                            htemp = RT.TH1D(hname, hname, len(binning)-1, array('d', binning))
+                            htemp = RT.TH1D(hname, hname, len(_binning)-1, array('d', _binning))
                         else:
-                            htemp = RT.TH1D(hname, hname, int(binning[0]), binning[1], binning[2])
+                            htemp = RT.TH1D(hname, hname, int(_binning[0]), _binning[1], _binning[2])
                         htemp.Sumw2()
 
                     # ------- SETUP SELECTIONS
@@ -231,7 +231,7 @@ class histogram_getter:
                             _selection = f'{_selection} && {self.truth_mc}'
 
                         # skim pt slices
-                        if not self.use_skim:
+                        if not self.use_skim and dsid_str:
                             dsid = int(dsid_str)
                             # sherpa
                             if dsid in (361042, 361043, 361044, 364543):
@@ -294,24 +294,26 @@ class histogram_getter:
                     if is_mc:
                         # lumi weight
                         if self.use_lumiw:
-                            if not self.weights_strings and lumi_weight is not '':
+                            if not self.weights_strings and lumi_weight!='':
                                 w_list.append('%s' % lumi_weight)
                             else:
                                 if 'lumi_w' in self.weights_strings:
                                     lumi_weight = self.weights_strings['lumi_w']
-                                    w_list.append('%s' % lumi_weight)
+                                    w_list.append(lumi_weight)
 
                         # mc weight
                         if self.use_mcw:
-                            if self.weights_strings is not None and 'weight_mc' in self.weights_strings:
-                                w_list.append(self.weights_strings['weight_mc'])
+                            if self.weights_strings is not None:
+                                if 'weight_mc' in self.weights_strings:
+                                    w_list.append(self.weights_strings['weight_mc'])
                             else:
                                 w_list.append('weight_mc')
 
                         # scale factors
                         if self.use_sfw:
-                            if self.weights_strings is not None and 'weight_sf' in self.weights_strings:
-                                w_list.append(self.weights_strings['weight_sf'])
+                            if self.weights_strings is not None:
+                                if 'weight_sf' in self.weights_strings:
+                                    w_list.append(self.weights_strings['weight_sf'])
                             else:
                                 if syst != 'Nom' and self.systematics.affects_weight(syst) and not 'PRW_DATASF' in syst:
                                     w_list.append('weight_sf_%s' % syst)
@@ -320,8 +322,9 @@ class histogram_getter:
 
                         # pile-up
                         if self.use_purw:
-                            if self.weights_strings is not None and 'weight_pu' in self.weights_strings:
-                                w_list.append(self.weights_strings['weight_pu'])
+                            if self.weights_strings is not None:
+                                if 'weight_pu' in self.weights_strings:
+                                    w_list.append(self.weights_strings['weight_pu'])
                             else:
                                 if 'PRW_DATASF__1down' == syst:
                                     w_list.append('weight_pu_dn')
@@ -337,6 +340,18 @@ class histogram_getter:
                         # SUSY EWK BR re-weighting
                         # if self.ggm_br:
                         #     w_list.append(get_GGM_model_weight(*ggm_br))
+                        
+                        # Photon ID and Isolation scale factor weights
+                        if 'RZ' in self.wg_label:
+                            if 'id' in selection and 'weight_id' in self.weights_strings:
+                                w_list.append(self.weights_strings['weight_id'])
+                            if 'isoloose' in selection and 'weight_isoloose' in self.weights_strings:
+                                w_list.append(self.weights_strings['weight_isoloose'])
+                            elif 'isotight' in selection and 'weight_isotight' in self.weights_strings:
+                                w_list.append(self.weights_strings['weight_isotight'])
+                            elif 'isotightcaloonly' in selection and 'weight_isotightco' in self.weights_strings:
+                                w_list.append(self.weights_strings['weight_isotightco'])
+                                
 
                     elif is_fake:
                         if syst == 'Nom':
@@ -787,7 +802,8 @@ def is_2d_variable(variable):
 
 #===================================================================================================
 def get_escaped_variable(variable):
-    return variable.replace(':', '_').replace('/', '').replace('(', '').replace(')', '').replace('[', '').replace(']', '')
+    
+    return variable.replace('y_', 'ph_').replace(':', '_').replace('/', '').replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace('.', '_')
 #===================================================================================================
 
 #===================================================================================================
@@ -814,9 +830,9 @@ def fix_histogram_name(hist, name):
 
     hname = hist.GetName()
 
-    to_replace = '__' + hname.split('__')[1] + '__'
+    to_replace = '___' + hname.split('___')[1] + '___'
 
-    new_hname = hname.replace(to_replace, name)
+    new_hname = hname.replace(to_replace, '__'+name+'__')
 
     for i, j in replace_dict.items():
         if i in new_hname:
