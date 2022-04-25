@@ -28,6 +28,7 @@ lumi_dict = {
     '2016': 32965.30,
     '2017': 44307.40,
     '2018': 58450.10,
+    '2022': 0.0,
 }
 
 
@@ -36,7 +37,6 @@ lumi_dict = {
 #=====================================      HISTOGRAMMING
 #===================================================================================================
 #===================================================================================================
-
 class histogram_getter:
     #===============================================================================================
     def __init__(self, ana_rel, year,
@@ -46,7 +46,7 @@ class histogram_getter:
                  weights_strings=None, tree_name=None,
                  add_overflow_bin=False, scale=True, lumi=None,
                  use_skim=False, use_lumiw=True, use_mcw=True, use_sfw=True, use_purw=True,
-                 use_mcveto=True, use_phjet_w=False,
+                 use_mcveto=True, use_phjet_w=False, truth_mc='',
                  slices=False,
                  remove_var_cut=False,
                  seed_selection='(seed_met_et - 8)/sqrt(seed_sumet) < (1.0 + 0.1*seed_bjet_n)',
@@ -74,6 +74,7 @@ class histogram_getter:
         self.use_purw         = use_purw
         self.use_mcveto       = use_mcveto
         self.use_phjet_w      = use_phjet_w
+        self.truth_mc         = truth_mc
         self.slices           = slices
         self.remove_var_cut   = remove_var_cut
         self.seed_selection   = seed_selection
@@ -148,7 +149,7 @@ class histogram_getter:
             for fpath in all_files:
                 tree.Add(fpath)
         else:
-            file_ = RT.TFile.Open(path)
+            file_ = RT.TFile(path, 'read')
             tree = file_.Get(self.tree_name)
 
         # Lumi weight is the same for all histograms
@@ -225,6 +226,9 @@ class histogram_getter:
                                 _selection = '%s && mcveto==0' % _selection
                             else:
                                 _selection = 'mcveto==0'
+
+                        if self.truth_mc!='':
+                            _selection = f'{_selection} && {self.truth_mc}'
 
                         # skim pt slices
                         if not self.use_skim:
@@ -360,6 +364,7 @@ class histogram_getter:
                     else:
                         draw_list.append((hname, variable, varexp))
 
+
         # Use Draw or MutiDraw to project all histograms (for 2D histograms only 1 variable allowed)
         if len(variables) == 1 and is_2d_variable(variables[0]):
             hname, variable, selection = draw_list[0]
@@ -377,14 +382,15 @@ class histogram_getter:
             if self.debug:
                 print(draw_list[0])
             MultiDraw(tree, *draw_list)
-
         for hist in histograms:
             hist.SetDirectory(0)
 
         if os.path.isdir(path):
             tree.Reset()
-            # tree.Delete()
+            del tree
         else:
+            tree.Reset()
+            del tree
             file_.Close()
 
         return histograms
