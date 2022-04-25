@@ -36,6 +36,12 @@ def get_binning_single_variable(variable, binning_dict):
 
     if binning is None and 'dphi' in variable:
         binning = binning_dict.get('dphi', None)
+        
+    if binning is None and '/' in variable:
+        binning = binning_dict.get(variable.split('/')[0], None)
+    
+    if binning is None and '*' in variable:
+        binning = binning_dict.get(variable.split('/')[0], None)
 
     return binning
 #===================================================================================================
