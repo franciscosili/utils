@@ -52,7 +52,7 @@ def _find_path(samples_paths, project=None, dsid=None, short_name=None, version=
     elif project.startswith('mc') and mc_campaign is not None:
         guess_path = f'v{version}/*{project}.{dsid}.{short_name}.mini.{mc_campaign}.p*.v{version}_output*'
     else:
-        guess_path = f'v{version}/user.*.{project}.{dsid}.{short_name}.mini.p*.v{version}_output*'
+        guess_path = f'v{version}/*{project}.{dsid}.{short_name}.mini.p*.v{version}_output*'
 
     for mini_dir in samples_paths:
         full_guess_path = f'{mini_dir}/{guess_path}'
@@ -142,6 +142,7 @@ def get_datasets(name, paths, samples, version=None, ignore_missing=True, mc_cam
                     project, dsid, short_name = m.group(1), m.group(2), m.group(3)
             except:
                 raise Exception(ds)
+
 
         # get path of the sample
         if extra_regex:

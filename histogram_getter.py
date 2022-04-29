@@ -11,7 +11,7 @@ from .binningutils import *
 from .histutils import *
 from . import xsutils
 from .multidraw import MultiDraw
-from .rootutils import Value
+from .utils import Value
 
 
 # from rootutils import Value
@@ -42,7 +42,7 @@ class histogram_getter:
     def __init__(self, ana_rel, year,
                  paths, samples,
                  binning, regions=None, selections=None,
-                 version=None, wg_label=None,
+                 version=None, wg_label='',
                  weights_strings=None, tree_name=None,
                  add_overflow_bin=False, scale=True, lumi=None,
                  use_skim=False, use_lumiw=True, use_mcw=True, use_sfw=True, use_purw=True,
@@ -213,9 +213,9 @@ class histogram_getter:
                         if len(_binning) > 3:
                             # if nominal_width is not None:
                             #     fix_events_by_interval = True
-                            htemp = RT.TH1D(hname, hname, len(_binning)-1, array('d', _binning))
+                            htemp = RT.TH1D(hname, '', len(_binning)-1, array('d', _binning))
                         else:
-                            htemp = RT.TH1D(hname, hname, int(_binning[0]), _binning[1], _binning[2])
+                            htemp = RT.TH1D(hname, '', int(_binning[0]), _binning[1], _binning[2])
                         htemp.Sumw2()
 
                     # ------- SETUP SELECTIONS
@@ -342,6 +342,7 @@ class histogram_getter:
                         #     w_list.append(get_GGM_model_weight(*ggm_br))
                         
                         # Photon ID and Isolation scale factor weights
+                        
                         if 'RZ' in self.wg_label:
                             if 'id' in selection and 'weight_id' in self.weights_strings:
                                 w_list.append(self.weights_strings['weight_id'])
@@ -424,6 +425,7 @@ class histogram_getter:
 
         # dataset: 2015, 2016, 2017, 2018, or combinations with "+"
         # 'Run2': 2015+2016+2017+2018
+        dataset_year = dataset if dataset else self.year
         if not dataset:
             dataset_year = self.year
             if dataset_year == 'Run2':
@@ -432,7 +434,7 @@ class histogram_getter:
         is_mc = (not 'data' in sample and not 'efake' in sample and not 'jfake' in sample and not 'smr' in sample)
 
         if '+' in dataset_year and not (is_mc and dataset_year == '2015+2016'):
-            if self.year: del self.year
+            # if self.year: del self.year
 
             dataset_years = dataset_year.split('+')
             if is_mc and '2015' in dataset_years and '2016' in dataset_years:
@@ -440,12 +442,12 @@ class histogram_getter:
                 dataset_years.remove('2016')
                 dataset_years.insert(0, '2015+2016')
 
-                _tmp_list = []
-                for y in dataset_years:
-                    _tmp_list.append(
-                        self.get_histograms(sample, regions, selections, variables, systematics,
-                                            binning, y, extra_regex)
-                    )
+            _tmp_list = []
+            for y in dataset_years:
+                _tmp_list.append(
+                    self.get_histograms(sample, regions, selections, variables, systematics,
+                                        binning, y, extra_regex)
+                )
             return sum_histograms(_tmp_list)
 
         # Data type/MC campaign
@@ -494,7 +496,7 @@ class histogram_getter:
                                                            selections, variables, dsid_str=dsid)
 
                 if self.slices and is_mc:
-                    if len(histograms_ds) == 1: histograms_slices[ds['short_name']] = histograms_ds[0]
+                    histograms_slices[ds['short_name']] = histograms_ds
 
                 if not histograms:
                     for hist in histograms_ds:
@@ -510,10 +512,11 @@ class histogram_getter:
                 histogram_add_overflow_bin(hist)
 
         if self.slices and is_mc:
-            for hist in histograms_slices.values():
-                fix_histogram_name(hist, sample)
-                if self.add_overflow_bin:
-                    histogram_add_overflow_bin(hist)
+            for slicename, hists in histograms_slices.items():
+                for h in hists:
+                    fix_histogram_name(h, sample, slicename)
+                    if self.add_overflow_bin:
+                        histogram_add_overflow_bin(h)
             return histograms, histograms_slices
         else:
             return histograms
@@ -803,12 +806,11 @@ def is_2d_variable(variable):
 
 #===================================================================================================
 def get_escaped_variable(variable):
-    
     return variable.replace('y_', 'ph_').replace(':', '_').replace('/', '').replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace('.', '_')
 #===================================================================================================
 
 #===================================================================================================
-def fix_histogram_name(hist, name):
+def fix_histogram_name(hist, name, slicename=''):
     replace_dict = {
         'efake15': 'efake',
         'efake16': 'efake',
@@ -832,9 +834,10 @@ def fix_histogram_name(hist, name):
     hname = hist.GetName()
 
     to_replace = '___' + hname.split('___')[1] + '___'
+    replace_with = '__'+name+'__'
+    if slicename: replace_with += slicename+'__'
 
-    new_hname = hname.replace(to_replace, '__'+name+'__')
-
+    new_hname = hname.replace(to_replace, replace_with)
     for i, j in replace_dict.items():
         if i in new_hname:
             new_hname = new_hname.replace(i, j)
