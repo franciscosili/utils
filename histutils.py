@@ -338,7 +338,7 @@ def get_histogram(filename, treename, variable, selection='', xmin=None, xmax=No
 #===================================================================================================
 
 #===================================================================================================
-def get_stack(hists):
+def get_stack(hists, ordered):
     stack = ROOT.THStack()
     def _compare(a, b):
         amax = a.GetMaximum()
@@ -346,12 +346,21 @@ def get_stack(hists):
         return compare(int(amax), int(bmax))
 
     try:
-        for hist in sorted(hists.values(), key=cmp_to_key(_compare)):
-            stack.Add(hist)
+        if ordered:
+            for hist in sorted(hists.values(), key=cmp_to_key(_compare)):
+                stack.Add(hist)
+        else:
+            for hist in hists.values():
+                stack.Add(hist)
+            
     except AttributeError:
         try:
-            for hist in sorted(hists, key=cmp_to_key(_compare)):
-                stack.Add(hist)
+            if ordered:
+                for hist in sorted(hists, key=cmp_to_key(_compare)):
+                    stack.Add(hist)
+            else:
+                for hist in hists:
+                    stack.Add(hist)
         except:
             print('Input is not a list nor a dictionary.')
             pass
