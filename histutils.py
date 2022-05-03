@@ -375,12 +375,13 @@ def compare(a, b):
 #===================================================================================================
 
 #===================================================================================================
-def get_histogram_file(fname, hname):
+def get_histogram_file(fname, hname, debug=True):
     
     _infile = ROOT.TFile(fname, 'read')    
     
-    print(f'Getting histograms from file {fname}')
-    print(f'Histogram name: {hname}')
+    if debug:
+        print(f'Getting histograms from file {fname}')
+        print(f'Histogram name: {hname}')
     
     hist = _infile.Get(hname)
     hist.SetDirectory(0)
