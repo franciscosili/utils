@@ -155,7 +155,7 @@ class histogram_getter:
         # ----------------------------------------------
         # Create histograms and "tuples" for MultiDraw
         # ----------------------------------------------
-        draw_list = []
+        draw_list  = []
         histograms = []
 
         # get a list of selections or regions
@@ -202,8 +202,6 @@ class histogram_getter:
                         htemp.Sumw2()
                     else:
                         if len(_binning) > 3:
-                            # if nominal_width is not None:
-                            #     fix_events_by_interval = True
                             htemp = RT.TH1D(hname, '', len(_binning)-1, array('d', _binning))
                         else:
                             htemp = RT.TH1D(hname, '', int(_binning[0]), _binning[1], _binning[2])
