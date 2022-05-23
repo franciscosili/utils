@@ -69,7 +69,7 @@ def get_binning(variable, binning_dict):
         binning = get_binning_single_variable(variable, binning_dict)
 
     if binning is None:
-        print('Not bins configured for this variable %s. Using default binning' % variable)
+        print('Binning is not configured for this variable %s. Using default binning instead.' % variable)
         binning = binning_dict['default']
 
     return binning

@@ -120,12 +120,12 @@ class histogram_getter:
         """
         get histogram for a given sample (ds) and year
         """
-        is_fake = ('efake' in name or 'jfake' in name)
+        is_fake  = ('efake' in name or 'jfake' in name)
         is_phjet = ('photonjet' in name)
-        is_smr = ('smr' in name)
+        is_smr   = ('smr' in name)
 
-        variables  = variables if isinstance(variables, list) else [variables, ]
-        regions    = regions if isinstance(regions, list) else [regions, ]
+        variables  = variables  if isinstance(variables , list) else [variables , ]
+        regions    = regions    if isinstance(regions   , list) else [regions   , ]
         selections = selections if isinstance(selections, list) else [selections, ]
 
         # ------------
