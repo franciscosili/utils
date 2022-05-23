@@ -1,5 +1,4 @@
 import os
-from pickle import NONE
 import re
 import glob
 from array import array
@@ -12,14 +11,6 @@ from .histutils import *
 from . import xsutils
 from .multidraw import MultiDraw
 from .utils import Value
-
-
-# from rootutils import Value
-# from histutils import histogram_add_overflow_bin, histogram
-# from samples import samples_dict
-# from binning import get_binning
-# import systematics as systematics_
-# import regions as regions_
 
 
 # Luminosity
