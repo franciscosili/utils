@@ -281,33 +281,24 @@ class histogram_getter:
                     # ------- SETUP WEIGHTS
                     w_list = []
                     if is_mc:
+                        # all weights for PhotonID case
+                        if self.weights_strings:
+                            w_list.append(self.weights_strings['totalw'])
+                        
                         # lumi weight
-                        if self.use_lumiw:
-                            if not self.weights_strings and lumi_weight!='':
-                                w_list.append('%s' % lumi_weight)
-                            else:
-                                if 'lumi_w' in self.weights_strings:
-                                    lumi_weight = self.weights_strings['lumi_w']
-                                    w_list.append(lumi_weight)
+                        if self.use_lumiw and not self.weights_strings:
+                            w_list.append('%s' % lumi_weight)
 
                         # mc weight
-                        if self.use_mcw:
-                            if self.weights_strings is not None:
-                                if 'weight_mc' in self.weights_strings:
-                                    w_list.append(self.weights_strings['weight_mc'])
-                            else:
-                                w_list.append('weight_mc')
+                        if self.use_mcw and not self.weights_strings:
+                            w_list.append('weight_mc')
 
                         # scale factors
-                        if self.use_sfw:
-                            if self.weights_strings is not None:
-                                if 'weight_sf' in self.weights_strings:
-                                    w_list.append(self.weights_strings['weight_sf'])
+                        if self.use_sfw and not self.weights_strings:
+                            if syst != 'Nom' and self.systematics.affects_weight(syst) and not 'PRW_DATASF' in syst:
+                                w_list.append('weight_sf_%s' % syst)
                             else:
-                                if syst != 'Nom' and self.systematics.affects_weight(syst) and not 'PRW_DATASF' in syst:
-                                    w_list.append('weight_sf_%s' % syst)
-                                else:
-                                    w_list.append('weight_sf')
+                                w_list.append('weight_sf')
 
                         # pile-up
                         if self.use_purw:
@@ -331,7 +322,6 @@ class histogram_getter:
                         #     w_list.append(get_GGM_model_weight(*ggm_br))
                         
                         # Photon ID and Isolation scale factor weights
-                        
                         if 'RZ' in self.wg_label:
                             if 'id' in selection and 'weight_id' in self.weights_strings:
                                 w_list.append(self.weights_strings['weight_id'])
@@ -342,7 +332,6 @@ class histogram_getter:
                             elif 'isotightcaloonly' in selection and 'weight_isotightco' in self.weights_strings:
                                 w_list.append(self.weights_strings['weight_isotightco'])
                                 
-
                     elif is_fake:
                         if syst == 'Nom':
                             w_list.append('weight_ff')
@@ -350,7 +339,13 @@ class histogram_getter:
                             w_list.append('weight_ff_dn')
                         elif syst == 'EFAKE_SYST__1up' or syst == 'JFAKE_SYST__1up':
                             w_list.append('weight_ff_up')
-
+                    
+                    else:
+                        if self.weights_strings:
+                            w_list.append(self.weights_strings['data_'])
+                            w_list.append(self.weights_strings['weight_data'])
+                    
+                    
                     w_str = '*'.join(w_list) if self.scale else ''
 
                     # ------- SETUP DRAW LIST AND ADD HISTOGRAMS
@@ -361,7 +356,7 @@ class histogram_getter:
                         varexp = _selection
                     elif self.scale:
                         varexp = w_str
-
+                    
                     histograms.append(htemp)
 
                     if variable == 'cuts':
@@ -475,6 +470,10 @@ class histogram_getter:
                 histograms_slices = {}
 
             name_to_show = f'{sample}/{self.mc_campaign}' if is_mc else sample
+            
+            print('Using samples:')
+            for ds in datasets:
+                print('   %s' % ds['path'])
 
             for ds in tqdm(datasets, desc=name_to_show):
                 try:
