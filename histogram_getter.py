@@ -37,7 +37,7 @@ class histogram_getter:
                  weights_strings=None, tree_name=None,
                  add_overflow_bin=False, scale=True, lumi=None,
                  use_skim=False, use_lumiw=True, use_mcw=True, use_sfw=True, use_purw=True,
-                 use_mcveto=True, use_phjet_w=False, truth_mc='',
+                 use_mcveto=True, use_phjet_w=False,
                  slices=False,
                  remove_var_cut=False,
                  seed_selection='(seed_met_et - 8)/sqrt(seed_sumet) < (1.0 + 0.1*seed_bjet_n)',
@@ -65,7 +65,6 @@ class histogram_getter:
         self.use_purw         = use_purw
         self.use_mcveto       = use_mcveto
         self.use_phjet_w      = use_phjet_w
-        self.truth_mc         = truth_mc
         self.slices           = slices
         self.remove_var_cut   = remove_var_cut
         self.seed_selection   = seed_selection
@@ -144,13 +143,17 @@ class histogram_getter:
             tree = file_.Get(self.tree_name)
 
         # Lumi weight is the same for all histograms
-        if is_mc and self.use_lumiw and not self.weights_strings:
-            if self.use_skim:
-                lumi_weight = 'weight_xs*%.2f' % lumi
-            elif dsid_str:
-                lumi_weight = '%s' % get_lumi_weight(path, int(dsid_str), lumi)
+        if is_mc and self.use_lumiw:
+            if not self.weights_strings:
+                if self.use_skim:
+                    lumi_weight = 'weight_xs*%.2f' % lumi
+                elif dsid_str:
+                    lumi_weight = '%s' % get_lumi_weight(path, int(dsid_str), lumi)
+                else:
+                    lumi_weight = ''
             else:
-                lumi_weight = ''
+                if 'weight_lumi' not in self.weights_strings:
+                    lumi_weight = str(lumi)
 
         # ----------------------------------------------
         # Create histograms and "tuples" for MultiDraw
@@ -215,9 +218,6 @@ class histogram_getter:
                                 _selection = '%s && mcveto==0' % _selection
                             else:
                                 _selection = 'mcveto==0'
-
-                        if self.truth_mc!='':
-                            _selection = f'{_selection} && {self.truth_mc}'
 
                         # skim pt slices
                         if not self.use_skim and dsid_str:
@@ -286,8 +286,14 @@ class histogram_getter:
                             w_list.append(self.weights_strings['totalw'])
                         
                         # lumi weight
-                        if self.use_lumiw and not self.weights_strings:
-                            w_list.append('%s' % lumi_weight)
+                        if self.use_lumiw:
+                            if not self.weights_strings:
+                                w_list.append('%s' % lumi_weight)
+                            else:
+                                if 'weight_lumi' not in self.weights_strings:
+                                    w_list.append('%s' % lumi_weight)
+                                else:
+                                    w_list.append(self.weights_strings['weight_lumi'])
 
                         # mc weight
                         if self.use_mcw and not self.weights_strings:
@@ -342,7 +348,6 @@ class histogram_getter:
                     
                     else:
                         if self.weights_strings:
-                            w_list.append(self.weights_strings['data_'])
                             w_list.append(self.weights_strings['weight_data'])
                     
                     
@@ -352,6 +357,7 @@ class histogram_getter:
                     varexp = ''
                     if _selection and w_str:
                         varexp = '(%s)*(%s)' % (_selection, w_str)
+                        
                     elif _selection:
                         varexp = _selection
                     elif self.scale:
@@ -361,6 +367,8 @@ class histogram_getter:
 
                     if variable == 'cuts':
                         draw_list.append((hname, '1', varexp))
+                    elif variable == 'weights':
+                        draw_list.append((hname, w_str, varexp))
                     else:
                         draw_list.append((hname, variable, varexp))
 
@@ -794,7 +802,17 @@ def is_2d_variable(variable):
 
 #===================================================================================================
 def get_escaped_variable(variable):
-    return variable.replace('y_', 'ph_').replace(':', '_').replace('/', '').replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace('.', '_')
+    variable = variable.replace('y_', 'ph_')
+    variable = variable.replace(':', '_')
+    variable = variable.replace('/', '')
+    variable = variable.replace('(', '')
+    variable = variable.replace(')', '')
+    variable = variable.replace('[', '')
+    variable = variable.replace(']', '')
+    variable = variable.replace('.', '_')
+    variable = variable.replace('*', '_')
+    variable = variable.replace('/', '_over_')
+    return variable
 #===================================================================================================
 
 #===================================================================================================
