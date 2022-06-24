@@ -398,3 +398,10 @@ def get_ratio_hist(hnum, hden, hname='ratio_hist'):
     
     return ratio
 #===================================================================================================
+
+#===================================================================================================
+def get_scale_factor(href, h):
+    denom = h.Integral()*href.GetXaxis().GetBinWidth(1)
+    if denom == 0: return 1
+    return href.Integral()*h.GetXaxis().GetBinWidth(1)/denom
+#===================================================================================================
