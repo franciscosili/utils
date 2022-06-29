@@ -40,7 +40,8 @@ class histogram_getter:
                  use_mcveto=True, use_phjet_w=False,
                  slices=False,
                  remove_var_cut=False,
-                 seed_selection='(seed_met_et - 8)/sqrt(seed_sumet) < (1.0 + 0.1*seed_bjet_n)',
+                 vars_cxx=None,
+                #  seed_selection='(seed_met_et - 8)/sqrt(seed_sumet) < (1.0 + 0.1*seed_bjet_n)',
                  preselection=None,
                  ignore_missing=None,
                  systs_module=None,
@@ -67,7 +68,7 @@ class histogram_getter:
         self.use_phjet_w      = use_phjet_w
         self.slices           = slices
         self.remove_var_cut   = remove_var_cut
-        self.seed_selection   = seed_selection
+        # self.seed_selection   = seed_selection
         self.ignore_missing   = ignore_missing
         self.debug            = debug
 
@@ -102,13 +103,15 @@ class histogram_getter:
         self.selections       = selections
         self.preselection     = preselection
         self.binning          = binning
-
+        
+        self.vars_cxx         = vars_cxx
+        
+        if self.vars_cxx:
+            RT.gInterpreter.Declare(self.vars_cxx)
 
         if systs_module:
             import systs_module as systematics_
             self.systematics = systematics_
-
-        # RT.gInterpreter.Declare(open(os.environ['snip_path'] + '/variables.cxx').read())
 
         return
     #===============================================================================================
@@ -121,11 +124,14 @@ class histogram_getter:
         """
         is_fake  = ('efake' in name or 'jfake' in name)
         is_phjet = ('photonjet' in name)
-        is_smr   = ('smr' in name)
+        # is_smr   = ('smr' in name)
 
         variables  = variables  if isinstance(variables , list) else [variables , ]
-        regions    = regions    if isinstance(regions   , list) else [regions   , ]
-        selections = selections if isinstance(selections, list) else [selections, ]
+        if regions:
+            regions = regions if isinstance(regions, list) else [regions, ]
+        if selections:
+            selections = selections if isinstance(selections, list) else [selections, ]
+
 
         # ------------
         # File/Chain
@@ -141,6 +147,10 @@ class histogram_getter:
         else:
             file_ = RT.TFile(path, 'read')
             tree = file_.Get(self.tree_name)
+
+        leaves = []
+        for l in tree.GetListOfLeaves():
+            leaves.append(l.GetName())
 
         # Lumi weight is the same for all histograms
         if is_mc and self.use_lumiw:
@@ -163,7 +173,12 @@ class histogram_getter:
 
         # get a list of selections or regions
         if regions and selections:
-            # check if same size ...
+            # check if same size
+            # if len(regions) < len(selections) and len(regions)==1:
+            #     reg = regions[0]
+            #     regions = []
+            #     for i, s in enumerate(selections):
+            #         regions.append( f'{reg}_cutflow{i}')
             pass
         elif regions and not selections:
             selections = [self.regions[reg] for reg in regions]
@@ -185,19 +200,25 @@ class histogram_getter:
                     if is_2d_variable(variable):
                         varx, vary = variable.split(':')
 
+                    # aux variable. In case the variable is coming from a function, check the extra
+                    # variables dictionary
+                    variable_name = variable
+                    if variable not in leaves:
+                        variable_name = get_var_function(variable)
+                    
                     # get binning
                     if binning is None or not binning:
-                        _binning = get_binning(variable, self.binning)
+                        _binning = get_binning(variable_name, self.binning)
                     else:
                         _binning = binning[ivariable]
 
                     # name to avoid the ROOT warning, not used
                     if self.use_skim:
-                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable)}'
+                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable_name)}'
                     elif dsid_str:
-                        hname = f'h___{dsid_str}___{systname}__{region}__{get_escaped_variable(variable)}'
+                        hname = f'h___{dsid_str}___{systname}__{region}__{get_escaped_variable(variable_name)}'
                     else:
-                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable)}'
+                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable_name)}'
 
                     # in case we give a 2D variable name, create a 2D histogram
                     if is_2d_variable(variable):
@@ -222,47 +243,56 @@ class histogram_getter:
                         # skim pt slices
                         if not self.use_skim and dsid_str:
                             dsid = int(dsid_str)
+                            if dsid in (361042, 361043, 361044, 364543, 361045, 361046, 361047, 364544,
+                                        361048, 361049, 361050, 364545, 361051, 361052, 361053, 364546,
+                                        361054, 361055, 361056, 361057, 361058, 361059, 364547,
+                                        800662, 800676, 800663, 800677, 800664, 800678,
+                                        800665, 800679, 800666, 800680, 800667, 800681,
+                                        800668, 800682, 800683, 800669, 800670, 800671) and \
+                                _selection.strip() != '':
+                                _selection += ' &&'
                             # sherpa
                             if dsid in (361042, 361043, 361044, 364543):
-                                _selection += f'&& ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
+                                if _selection.strip() != '':
+                                    _selection += f' ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
                             elif dsid in (361045, 361046, 361047, 364544):
-                                _selection += f'&& ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
+                                _selection += f' ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
                             elif dsid in (361048, 361049, 361050, 364545):
-                                _selection += f'&& ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
+                                _selection += f' ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
                             elif dsid in (361051, 361052, 361053, 364546):
-                                _selection += f'&& ph_truth_pt[0]>500. && ph_truth_pt[0]<1000.'
+                                _selection += f' ph_truth_pt[0]>500. && ph_truth_pt[0]<1000.'
                             elif dsid in (361054, 361055, 361056, 361057, 361058, 361059, 364547):
-                                _selection += f'&& ph_truth_pt[0]>1000.'
+                                _selection += f' ph_truth_pt[0]>1000.'
                             # pythia
                             elif dsid in (800662, 800676):
-                                _selection += f'&& ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
+                                _selection += f' ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
                             elif dsid in (800663, 800677):
-                                _selection += f'&& ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
+                                _selection += f' ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
                             elif dsid in (800664, 800678):
-                                _selection += f'&& ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
+                                _selection += f' ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
                             elif dsid in (800665, 800679):
-                                _selection += f'&& ph_truth_pt[0]>500. && ph_truth_pt[0]<800.'
+                                _selection += f' ph_truth_pt[0]>500. && ph_truth_pt[0]<800.'
                             elif dsid in (800666, 800680):
-                                _selection += f'&& ph_truth_pt[0]>800. && ph_truth_pt[0]<1000.'
+                                _selection += f' ph_truth_pt[0]>800. && ph_truth_pt[0]<1000.'
                             elif dsid in (800667, 800681):
-                                _selection += f'&& ph_truth_pt[0]>1000. && ph_truth_pt[0]<1500.'
+                                _selection += f' ph_truth_pt[0]>1000. && ph_truth_pt[0]<1500.'
                             elif dsid in (800668, 800682):
-                                _selection += f'&& ph_truth_pt[0]>1500. && ph_truth_pt[0]<2000.'
+                                _selection += f' ph_truth_pt[0]>1500. && ph_truth_pt[0]<2000.'
                             elif dsid in (800683,):
-                                _selection += f'&& ph_truth_pt[0]>2000.'
+                                _selection += f' ph_truth_pt[0]>2000.'
                             elif dsid in (800669,):
-                                _selection += f'&& ph_truth_pt[0]>2000. && ph_truth_pt[0]<2500.'
+                                _selection += f' ph_truth_pt[0]>2000. && ph_truth_pt[0]<2500.'
                             elif dsid in (800670,):
-                                _selection += f'&& ph_truth_pt[0]>2500. && ph_truth_pt[0]<3000.'
+                                _selection += f' ph_truth_pt[0]>2500. && ph_truth_pt[0]<3000.'
                             elif dsid in (800671,):
-                                _selection += f'&& ph_truth_pt[0]>3000.'
+                                _selection += f' ph_truth_pt[0]>3000.'
 
-                    if is_smr:
-                        _selection += '&& smeared==1 && %s' % self.seed_selection
+                    # if is_smr:
+                    #     _selection += '&& smeared==1 && %s' % self.seed_selection
 
                     # Remove variable from selection if n-1
-                    if self.remove_var_cut and variable in _selection and not variable == 'cuts':
-                        _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable])
+                    if self.remove_var_cut and variable_name in _selection and variable_name != 'cuts':
+                        _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable_name])
 
                     # if do_remove_var and (':' in variable):
                     #     if varx in selection:
@@ -451,6 +481,7 @@ class histogram_getter:
         if is_mc:
             lumi = get_lumi(dataset_year)
 
+
         if self.use_skim:
             skim_dict = {
                 'vjets'     : ['wjets', 'zlljets', 'znunujets'],
@@ -537,46 +568,69 @@ class histogram_getter:
     #===============================================================================================
 
     #===============================================================================================
-    def get_events(self, sample):
+    def get_events(self, sample, selections):
 
-        hist  = self.get_histogram(sample)
-        mean  = hist.GetBinContent(1)
-        error = hist.GetBinError(1)
-        hist.Delete()
+        hists = self.get_histograms(sample, None, selections, 'cuts')
+        
+        values = []
+        for h in hists:
+            mean  = h.GetBinContent(1)
+            error = h.GetBinError(1)
+            values.append(Value(mean, error))
 
-        return Value(mean, error)
+        return values
     #===============================================================================================
 
     #===============================================================================================
-    def get_cutflow(self, sample):
-        if not self.selections:
-            return None
+    def get_cutflow(self, sample, selection):
+        """Creates a cutflow histogram given a region and selection. It separates the selection into
+        different steps and calculates the number of events passing those steps.
 
-        cuts = [split_cut(cut) for cut in split_selection(self.selections[0])]
+        Args:
+            sample (str): name of the sample
+            region (str): name of the region
+            selection (str): selection to be applied and that is going to be separated into steps
+
+        Returns:
+            TH1F: histogram with cutflow
+        """
+
+        # create the histogram and split the cuts
+        cuts    = [split_cut(cut) for cut in split_selection(selection)]
         cutflow = histogram('cutflow', len(cuts)+1, 0.5, len(cuts)+1.5)
 
+        # histogram bin labels
         cutflow.GetXaxis().SetBinLabel(1, 'No Cut')
         for i, cut in enumerate(cuts):
             cutflow.GetXaxis().SetBinLabel(i+2, cut[0])
 
+        # add the first 'No Cut' cut
         cuts = [('', '', ''), ] + cuts
 
-        selection = ''
+        # now we want to concatenate, cut by cut, to the selection that is going to be applied in each
+        # step
+        selections = []
         for i, (var, op, value) in enumerate(cuts):
-            if not selection:
-                selection += '%s %s %s' % (var, op, value)
+            # get the last selection saved in 'selections'
+            if i == 0:
+                curr_sel = ''
             else:
-                selection += ' && %s %s %s' % (var, op, value)
-
-            selection = selection.strip()
-            if selection == ' ':
-                selection = ''
-
-            evts = self.get_events(sample)
-
-            cutflow.SetBinContent(i+1, evts.mean)
-            cutflow.SetBinError(i+1, evts.error)
-
+                curr_sel = selections[-1]
+            
+            if curr_sel.strip() == '':
+                curr_sel = f'{var} {op} {value}'
+            else:
+                curr_sel += f' && {var} {op} {value}'
+        
+            selections.append(curr_sel)
+        
+        # get the events for each cut
+        events_cuts = self.get_events(sample, selections)
+        
+        for i, e in enumerate(events_cuts,1):
+            cutflow.SetBinContent(i, e.mean)
+            cutflow.SetBinError  (i, e.error)
+        
         return cutflow
     #===============================================================================================
 
@@ -749,6 +803,11 @@ def replace_var(selection, oldvar, newvar):
     return ' && '.join(new_cuts)
 #===================================================================================================
 
+#===================================================================================================
+def get_var_function(variable):    
+    return variable.split('(')[0]
+#===================================================================================================
+
 
 #===================================================================================================
 #===================================================================================================
@@ -803,15 +862,17 @@ def is_2d_variable(variable):
 #===================================================================================================
 def get_escaped_variable(variable):
     variable = variable.replace('y_', 'ph_')
-    variable = variable.replace(':', '_')
-    variable = variable.replace('/', '')
+    if ':' in variable and not '::' in variable:
+        variable = variable.replace(':', '_')
+    elif '::' in variable:
+        variable = variable.replace('::', '')
     variable = variable.replace('(', '')
     variable = variable.replace(')', '')
     variable = variable.replace('[', '')
     variable = variable.replace(']', '')
     variable = variable.replace('.', '_')
-    variable = variable.replace('*', '_')
-    variable = variable.replace('/', '_over_')
+    variable = variable.replace('*', 'times')
+    variable = variable.replace('/', 'over')
     return variable
 #===================================================================================================
 
@@ -888,8 +949,8 @@ def get_lumi_weight(path, dsid, lumi, fs=None):
 
 #===================================================================================================
 def get_lumi(year):
-    if year == '2015+2016':
-        return lumi_dict['2015'] + lumi_dict['2016']
-    else:
-        return lumi_dict[year]
+    lumi = 0.0
+    for y in year.split('+'):
+        lumi += lumi_dict[y]
+    return lumi
 #===================================================================================================
