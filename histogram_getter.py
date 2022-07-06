@@ -2,10 +2,11 @@ import os
 import re
 import glob
 from array import array
+from functools import partial
 from tqdm import tqdm
 
 import ROOT as RT
-from .datasets_manager import get_datasets
+from .datasets_manager import get_datasets, get_mccampaign
 from .binningutils import *
 from .histutils import *
 from . import xsutils
@@ -45,6 +46,7 @@ class histogram_getter:
                  preselection=None,
                  ignore_missing=None,
                  systs_module=None,
+                 looper_func=None,
                  debug=False):
         # required parameters
         self.ana_rel          = ana_rel
@@ -80,18 +82,7 @@ class histogram_getter:
 
         # dataset year
         self.dataset_year = year
-        if self.dataset_year in ('2015', '2016', '2015+2016'):
-            self.run = 2
-            self.mc_campaign = 'mc16a' if self.ana_rel < 22 else 'mc20a'
-        elif self.dataset_year == '2017':
-            self.run = 2
-            self.mc_campaign = 'mc16d' if self.ana_rel < 22 else 'mc20d'
-        elif self.dataset_year == '2018':
-            self.run = 2
-            self.mc_campaign = 'mc16e' if self.ana_rel < 22 else 'mc20e'
-        elif self.dataset_year == '2022':
-            self.run = 3
-            self.mc_campaign = 'mc21a'
+        self.mc_campaign, self.run = get_mccampaign(self.dataset_year, self.ana_rel)
 
         print('The configuration for histogram_getter is:')
         for var_name, var_val in vars(self).items():
@@ -106,6 +97,8 @@ class histogram_getter:
         
         self.vars_cxx         = vars_cxx
         
+        self.looper_func      = looper_func
+        
         if self.vars_cxx:
             RT.gInterpreter.Declare(self.vars_cxx)
 
@@ -115,7 +108,7 @@ class histogram_getter:
 
         return
     #===============================================================================================
-
+    
     #===============================================================================================
     def _get_multi_histograms(self, name, path, is_mc, lumi, regions, selections, variables,
                               systematics=['Nom', ], binning=None, dsid_str=None):
@@ -151,14 +144,17 @@ class histogram_getter:
         leaves = []
         for l in tree.GetListOfLeaves():
             leaves.append(l.GetName())
-
+            
+    
         # Lumi weight is the same for all histograms
         if is_mc and self.use_lumiw:
             if not self.weights_strings:
                 if self.use_skim:
                     lumi_weight = 'weight_xs*%.2f' % lumi
                 elif dsid_str:
-                    lumi_weight = '%s' % get_lumi_weight(path, int(dsid_str), lumi)
+                    lumi_weight = get_lumi_weight(path, int(dsid_str), lumi)
+                    if not self.looper_func:
+                        lumi_weight = '%s' % lumi_weight
                 else:
                     lumi_weight = ''
             else:
@@ -173,12 +169,6 @@ class histogram_getter:
 
         # get a list of selections or regions
         if regions and selections:
-            # check if same size
-            # if len(regions) < len(selections) and len(regions)==1:
-            #     reg = regions[0]
-            #     regions = []
-            #     for i, s in enumerate(selections):
-            #         regions.append( f'{reg}_cutflow{i}')
             pass
         elif regions and not selections:
             selections = [self.regions[reg] for reg in regions]
@@ -243,49 +233,7 @@ class histogram_getter:
                         # skim pt slices
                         if not self.use_skim and dsid_str:
                             dsid = int(dsid_str)
-                            if dsid in (361042, 361043, 361044, 364543, 361045, 361046, 361047, 364544,
-                                        361048, 361049, 361050, 364545, 361051, 361052, 361053, 364546,
-                                        361054, 361055, 361056, 361057, 361058, 361059, 364547,
-                                        800662, 800676, 800663, 800677, 800664, 800678,
-                                        800665, 800679, 800666, 800680, 800667, 800681,
-                                        800668, 800682, 800683, 800669, 800670, 800671) and \
-                                _selection.strip() != '':
-                                _selection += ' &&'
-                            # sherpa
-                            if dsid in (361042, 361043, 361044, 364543):
-                                if _selection.strip() != '':
-                                    _selection += f' ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
-                            elif dsid in (361045, 361046, 361047, 364544):
-                                _selection += f' ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
-                            elif dsid in (361048, 361049, 361050, 364545):
-                                _selection += f' ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
-                            elif dsid in (361051, 361052, 361053, 364546):
-                                _selection += f' ph_truth_pt[0]>500. && ph_truth_pt[0]<1000.'
-                            elif dsid in (361054, 361055, 361056, 361057, 361058, 361059, 364547):
-                                _selection += f' ph_truth_pt[0]>1000.'
-                            # pythia
-                            elif dsid in (800662, 800676):
-                                _selection += f' ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
-                            elif dsid in (800663, 800677):
-                                _selection += f' ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
-                            elif dsid in (800664, 800678):
-                                _selection += f' ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
-                            elif dsid in (800665, 800679):
-                                _selection += f' ph_truth_pt[0]>500. && ph_truth_pt[0]<800.'
-                            elif dsid in (800666, 800680):
-                                _selection += f' ph_truth_pt[0]>800. && ph_truth_pt[0]<1000.'
-                            elif dsid in (800667, 800681):
-                                _selection += f' ph_truth_pt[0]>1000. && ph_truth_pt[0]<1500.'
-                            elif dsid in (800668, 800682):
-                                _selection += f' ph_truth_pt[0]>1500. && ph_truth_pt[0]<2000.'
-                            elif dsid in (800683,):
-                                _selection += f' ph_truth_pt[0]>2000.'
-                            elif dsid in (800669,):
-                                _selection += f' ph_truth_pt[0]>2000. && ph_truth_pt[0]<2500.'
-                            elif dsid in (800670,):
-                                _selection += f' ph_truth_pt[0]>2500. && ph_truth_pt[0]<3000.'
-                            elif dsid in (800671,):
-                                _selection += f' ph_truth_pt[0]>3000.'
+                            _selection = select_truth_slices(dsid, _selection)
 
                     # if is_smr:
                     #     _selection += '&& smeared==1 && %s' % self.seed_selection
@@ -403,33 +351,43 @@ class histogram_getter:
                         draw_list.append((hname, variable, varexp))
 
 
-        # Use Draw or MutiDraw to project all histograms (for 2D histograms only 1 variable allowed)
-        if len(variables) == 1 and is_2d_variable(variables[0]):
-            hname, variable, selection = draw_list[0]
-            if self.debug:
-                print(hname, variable, selection)
-
-            variable = '%s:%s' % (vary, varx)
-            tree.Project(hname, variable, selection)
-        elif len(draw_list) == 1:
-            hname, variable, selection = draw_list[0]
-            if self.debug:
-                print(hname, variable, selection)
-            tree.Project(hname, variable, selection)
+        if self.looper_func:
+            # in case some preselection was passed, get the cut for the preselection and adding the truth cuts
+            _, _, selection = draw_list[0]
+            
+            looper = tree_looper(tree, self.looper_func)
+            histograms = looper.loop(presel=selection, lumi_weight=lumi_weight)
+        
         else:
-            if self.debug:
-                print(draw_list[0])
-            MultiDraw(tree, *draw_list)
-        for hist in histograms:
-            hist.SetDirectory(0)
 
-        if os.path.isdir(path):
-            tree.Reset()
-            del tree
-        else:
-            tree.Reset()
-            del tree
-            file_.Close()
+
+            # Use Draw or MutiDraw to project all histograms (for 2D histograms only 1 variable allowed)
+            if len(variables) == 1 and is_2d_variable(variables[0]):
+                hname, variable, selection = draw_list[0]
+                if self.debug:
+                    print(hname, variable, selection)
+
+                variable = '%s:%s' % (vary, varx)
+                tree.Project(hname, variable, selection)
+            elif len(draw_list) == 1:
+                hname, variable, selection = draw_list[0]
+                if self.debug:
+                    print(hname, variable, selection)
+                tree.Project(hname, variable, selection)
+            else:
+                if self.debug:
+                    print(draw_list[0])
+                MultiDraw(tree, *draw_list)
+            for hist in histograms:
+                hist.SetDirectory(0)
+
+            if os.path.isdir(path):
+                tree.Reset()
+                del tree
+            else:
+                tree.Reset()
+                del tree
+                file_.Close()
 
         return histograms
     #===============================================================================================
@@ -568,9 +526,9 @@ class histogram_getter:
     #===============================================================================================
 
     #===============================================================================================
-    def get_events(self, sample, selections):
+    def get_events(self, sample, selections, regions=None):
 
-        hists = self.get_histograms(sample, None, selections, 'cuts')
+        hists = self.get_histograms(sample, regions, selections, 'cuts')
         
         values = []
         for h in hists:
@@ -582,7 +540,7 @@ class histogram_getter:
     #===============================================================================================
 
     #===============================================================================================
-    def get_cutflow(self, sample, selection):
+    def get_cutflow(self, sample, selection, regions=None):
         """Creates a cutflow histogram given a region and selection. It separates the selection into
         different steps and calculates the number of events passing those steps.
 
@@ -625,7 +583,7 @@ class histogram_getter:
             selections.append(curr_sel)
         
         # get the events for each cut
-        events_cuts = self.get_events(sample, selections)
+        events_cuts = self.get_events(sample, selections, regions)
         
         for i, e in enumerate(events_cuts,1):
             cutflow.SetBinContent(i, e.mean)
@@ -634,6 +592,57 @@ class histogram_getter:
         return cutflow
     #===============================================================================================
 
+
+#===================================================================================================
+def select_truth_slices(dsid, selection):
+    
+    
+    if dsid in (361042, 361043, 361044, 364543, 361045, 361046, 361047, 364544,
+                361048, 361049, 361050, 364545, 361051, 361052, 361053, 364546,
+                361054, 361055, 361056, 361057, 361058, 361059, 364547,
+                800662, 800676, 800663, 800677, 800664, 800678,
+                800665, 800679, 800666, 800680, 800667, 800681,
+                800668, 800682, 800683, 800669, 800670, 800671) and \
+        selection.strip() != '':
+        selection += ' &&'
+    # sherpa
+    if dsid in (361042, 361043, 361044, 364543):
+        if selection.strip() != '':
+            selection += f' ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
+    elif dsid in (361045, 361046, 361047, 364544):
+        selection += f' ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
+    elif dsid in (361048, 361049, 361050, 364545):
+        selection += f' ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
+    elif dsid in (361051, 361052, 361053, 364546):
+        selection += f' ph_truth_pt[0]>500. && ph_truth_pt[0]<1000.'
+    elif dsid in (361054, 361055, 361056, 361057, 361058, 361059, 364547):
+        selection += f' ph_truth_pt[0]>1000.'
+    # pythia
+    elif dsid in (800662, 800676):
+        selection += f' ph_truth_pt[0]>70. && ph_truth_pt[0]<140.'
+    elif dsid in (800663, 800677):
+        selection += f' ph_truth_pt[0]>140. && ph_truth_pt[0]<280.'
+    elif dsid in (800664, 800678):
+        selection += f' ph_truth_pt[0]>280. && ph_truth_pt[0]<500.'
+    elif dsid in (800665, 800679):
+        selection += f' ph_truth_pt[0]>500. && ph_truth_pt[0]<800.'
+    elif dsid in (800666, 800680):
+        selection += f' ph_truth_pt[0]>800. && ph_truth_pt[0]<1000.'
+    elif dsid in (800667, 800681):
+        selection += f' ph_truth_pt[0]>1000. && ph_truth_pt[0]<1500.'
+    elif dsid in (800668, 800682):
+        selection += f' ph_truth_pt[0]>1500. && ph_truth_pt[0]<2000.'
+    elif dsid in (800683,):
+        selection += f' ph_truth_pt[0]>2000.'
+    elif dsid in (800669,):
+        selection += f' ph_truth_pt[0]>2000. && ph_truth_pt[0]<2500.'
+    elif dsid in (800670,):
+        selection += f' ph_truth_pt[0]>2500. && ph_truth_pt[0]<3000.'
+    elif dsid in (800671,):
+        selection += f' ph_truth_pt[0]>3000.'
+        
+    return selection
+#===================================================================================================
 
 #===================================================================================================
 #===================================================================================================
@@ -871,8 +880,8 @@ def get_escaped_variable(variable):
     variable = variable.replace('[', '')
     variable = variable.replace(']', '')
     variable = variable.replace('.', '_')
-    variable = variable.replace('*', 'times')
-    variable = variable.replace('/', 'over')
+    variable = variable.replace('*', '_times_')
+    variable = variable.replace('/', '_over_')
     return variable
 #===================================================================================================
 
@@ -954,3 +963,20 @@ def get_lumi(year):
         lumi += lumi_dict[y]
     return lumi
 #===================================================================================================
+
+
+class tree_looper:
+    #===============================================================================================
+    def __init__(self, tree, looper_func):
+        self.tree = tree
+        self.loop = partial(looper_func, self)
+        return
+    #===============================================================================================
+
+    #===============================================================================================
+    def set_branches(self, branches):
+        self.tree.SetBranchStatus('*', 0)
+        for branch in branches:
+            self.tree.SetBranchStatus(branch, 1)
+        pass
+    #===============================================================================================
