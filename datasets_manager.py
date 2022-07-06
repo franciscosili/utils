@@ -32,6 +32,24 @@ r_ds_per = re.compile(f'({_period_regex_start})\.{_regex_end_per}')
 #===================================================================================================
 
 #===================================================================================================
+def get_mccampaign(year, ana_release):    
+    if year in ('2015', '2016', '2015+2016'):
+        run = 2
+        mc_campaign = 'mc16a' if ana_release < 22 else 'mc20a'
+    elif year == '2017':
+        run = 2
+        mc_campaign = 'mc16d' if ana_release < 22 else 'mc20d'
+    elif year == '2018':
+        run = 2
+        mc_campaign = 'mc16e' if ana_release < 22 else 'mc20e'
+    elif year == '2022':
+        run = 3
+        mc_campaign = 'mc21'
+    
+    return mc_campaign, run
+#===================================================================================================
+
+#===================================================================================================
 def _find_path(samples_paths, project=None, dsid=None, short_name=None, version=None, mc_campaign=None, full_ds=None):
     """Get the path with the input mini-ntuples
 
