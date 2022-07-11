@@ -490,9 +490,10 @@ class histogram_getter:
                     for hall, hnew in zip(histograms, histograms_ds):
                         hall.Add(hnew, 1)
 
-        # Fix histogram name and add oflow bin
+        # Fix histogram name and add overflow bin
         for hist in histograms:
-            fix_histogram_name(hist, sample)
+            if '__' in hist.GetName():
+                fix_histogram_name(hist, sample)
             if self.add_overflow_bin:
                 histogram_add_overflow_bin(hist)
 
