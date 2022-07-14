@@ -99,7 +99,7 @@ class histogram_getter:
         
         self.looper_func      = looper_func
         
-        if self.vars_cxx:
+        if self.vars_cxx:            
             RT.gInterpreter.Declare(self.vars_cxx)
 
         if systs_module:
@@ -201,7 +201,7 @@ class histogram_getter:
                     # aux variable. In case the variable is coming from a function, check the extra
                     # variables dictionary
                     variable_name = variable
-                    if variable not in leaves:
+                    if variable not in leaves and 'lumi' not in variable:
                         variable_name = get_var_function(variable)
                     
                     # get binning
@@ -485,6 +485,7 @@ class histogram_getter:
                     dsid = ds['dsid']
                 except KeyError:
                     dsid = None
+                
                 histograms_ds = self._get_multi_histograms(sample, ds['path'], is_mc, lumi, regions,
                                                            selections, variables, dsid_str=dsid)
 
