@@ -1,8 +1,8 @@
 # Signal cross sections
+import os
 
-
-# data_dir = os.environ['PJ_ANALYSIS'] + '/data/'
-# xs_file = os.path.join(data_dir, 'CrossSectionData.txt')
+data_dir = os.environ['PJ_ANALYSIS'] + '/data/'
+xs_file_local = os.path.join(data_dir, 'CrossSectionData.txt')
 
 xs_file = '/cvmfs/atlas.cern.ch/repo/sw/database/GroupData/dev/PMGTools/PMGxsecDB_mc16.txt'
 
@@ -10,8 +10,12 @@ _xs_db       = dict()
 _xs_unc_db   = dict()
 
 #===================================================================================================
-def _create_xs_db():
-    with open(xs_file) as f:
+def _create_xs_db(file='cmvfs'):
+    if file == 'local':
+        xsfile = xs_file_local
+    else:
+        xsfile = xs_file
+    with open(xsfile) as f:
         for line in f:
             line = line.replace('\n', '')
             if not line or line.startswith('#'):
@@ -31,11 +35,10 @@ def _create_xs_db():
 #===================================================================================================
 
 #===================================================================================================
-def get_xs_from_dsid(dsid):
-
+def get_xs_from_dsid(dsid, file):
     if not _xs_db:
-        _create_xs_db()
-
+        _create_xs_db(file)
+        
     if dsid in _xs_db:
         return float(_xs_db[dsid])
 
