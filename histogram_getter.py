@@ -337,13 +337,14 @@ class histogram_getter:
                             w_list.append(self.weights_strings['weight_data'])
                     
                     
-                    w_str = '*'.join(w_list) if self.scale else ''
+                    w_str = '*'.join(w_list) if self.scale and w_list else '1'
 
                     # ------- SETUP DRAW LIST AND ADD HISTOGRAMS
                     varexp = ''
-                    if _selection and w_str:
+                    if _selection.strip() and w_str:
                         varexp = '(%s)*(%s)' % (_selection, w_str)
-                        
+                    elif w_str:
+                        varexp = '(%s)' % (w_str)
                     elif _selection:
                         varexp = _selection
                     elif self.scale:
@@ -355,6 +356,8 @@ class histogram_getter:
                         draw_list.append((hname, '1', varexp))
                     elif variable == 'weights':
                         draw_list.append((hname, w_str, varexp))
+                    elif variable == 'weight_lumi':
+                        draw_list.append((hname, str(lumi_weight), varexp))
                     else:
                         draw_list.append((hname, variable, varexp))
 
@@ -445,7 +448,10 @@ class histogram_getter:
         # lumi
         lumi = 0.
         if is_mc:
-            lumi = get_lumi(dataset_year)
+            if not self.lumi:
+                lumi = get_lumi(dataset_year)
+            else:
+                lumi = self.lumi
 
 
         if self.use_skim:
@@ -570,7 +576,7 @@ class histogram_getter:
         # histogram bin labels
         cutflow.GetXaxis().SetBinLabel(1, 'No Cut')
         for i, cut in enumerate(cuts):
-            cutflow.GetXaxis().SetBinLabel(i+2, cut[0])
+            cutflow.GetXaxis().SetBinLabel(i+2, ''.join(c for c in cut))
 
         # add the first 'No Cut' cut
         cuts = [('', '', ''), ] + cuts
@@ -727,6 +733,7 @@ def split_cut(s):
         tuple: tuple containing the variable, the operator, and the value
     """
     s = s.strip()
+    
     for op in ['==', '>=', '<=', '>', '<', '!=']:
         if op in s:
             var, value = s.split(op)
@@ -823,8 +830,11 @@ def replace_var(selection, oldvar, newvar):
 #===================================================================================================
 
 #===================================================================================================
-def get_var_function(variable):    
-    return variable.split('(')[0]
+def get_var_function(variable):
+    if variable.split('(')[0] not in ('fabs', 'abs'):
+        return variable.split('(')[0]
+    else:
+        return variable
 #===================================================================================================
 
 
