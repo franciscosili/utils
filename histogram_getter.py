@@ -147,12 +147,17 @@ class histogram_getter:
             
     
         # Lumi weight is the same for all histograms
-        if is_mc and self.use_lumiw:
+        if is_mc:
             if not self.weights_strings:
                 if self.use_skim:
                     lumi_weight = 'weight_xs*%.2f' % lumi
                 elif dsid_str:
-                    lumi_weight = get_lumi_weight(path, int(dsid_str), lumi)
+                    # temporal hack for wrong xs in AMI and PMG file
+                    if 900474 <= int(dsid_str) <= 900487:
+                        lumi_weight = get_lumi_weight(path, int(dsid_str), lumi, 'local', self.debug)
+                    else:
+                        lumi_weight = get_lumi_weight(path, int(dsid_str), lumi, debug=self.debug)
+                    
                     if not self.looper_func:
                         lumi_weight = '%s' % lumi_weight
                 else:
@@ -160,6 +165,9 @@ class histogram_getter:
             else:
                 if 'weight_lumi' not in self.weights_strings:
                     lumi_weight = str(lumi)
+
+        if self.debug:
+            print('Lumi weight: ', lumi_weight)
 
         # ----------------------------------------------
         # Create histograms and "tuples" for MultiDraw
@@ -943,12 +951,17 @@ def get_sumw(path):
 #===================================================================================================
 
 #===================================================================================================
-def get_lumi_weight(path, dsid, lumi, fs=None):
+def get_lumi_weight(path, dsid, lumi, fs=None, debug=False):
 
     luminosity = float(lumi)
     sumw       = get_sumw(path)
-    xs         = xsutils.get_xs_from_dsid(dsid)
-
+    xs         = xsutils.get_xs_from_dsid(dsid, fs)
+    
+    if debug:
+        print('Luminosity    : ', luminosity)
+        print('Cross section : ', xs)
+        print('Sum of weights: ', sumw)
+    
     try:
         weight = (luminosity * xs) / sumw
     except:
