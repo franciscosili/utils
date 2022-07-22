@@ -943,20 +943,24 @@ def fix_histogram_name(hist, name, slicename=''):
 #===================================================================================================
 
 #===================================================================================================
-def get_sumw(path):
+def get_sumw(path, debug=False):
     sumw = 0
     if os.path.isdir(path):
         all_files = glob.glob(path+'/*root*')
-        for fpath in all_files:
+        for i, fpath in enumerate(all_files):
             f = RT.TFile.Open(fpath)
             tmp = f.Get('events')
             sumw += tmp.GetBinContent(3)  # bin 3 is the initial sumw
             f.Close()
+            if debug:
+                print(f"file #{i}, filename: {fpath}, sumw: {sumw}")
     else:
         f = RT.TFile.Open(path)
         tmp = f.Get('events')
         sumw = tmp.GetBinContent(3)  # bin 3 is the initial sumw
         f.Close()
+        if debug:
+            print(f"file #0, filename: {path}, sumw: {sumw}")
 
     return sumw
 #===================================================================================================
