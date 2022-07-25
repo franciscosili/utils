@@ -1,8 +1,9 @@
 # Signal cross sections
 import os
 
-data_dir = os.environ['PJ_ANALYSIS'] + '/data/'
-xs_file_local = os.path.join(data_dir, 'CrossSectionData.txt')
+if 'PJ_ANALYSIS' in os.environ:
+    data_dir = os.environ['PJ_ANALYSIS'] + '/data/'
+    xs_file_local = os.path.join(data_dir, 'CrossSectionData.txt')
 
 xs_file = '/cvmfs/atlas.cern.ch/repo/sw/database/GroupData/dev/PMGTools/PMGxsecDB_mc16.txt'
 
