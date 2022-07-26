@@ -40,6 +40,7 @@ def get_xs_from_dsid(dsid, file):
     if not _xs_db:
         _create_xs_db(file)
         
+        
     if dsid in _xs_db:
         return float(_xs_db[dsid])
 

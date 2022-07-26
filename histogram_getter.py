@@ -988,6 +988,7 @@ def get_lumi_weight(path, dsid, lumi, fs=None, debug=False):
 #===================================================================================================
 def get_lumi(year):
     lumi = 0.0
+    if year == 'full': year = '2015+2016+2017+2018'
     for y in year.split('+'):
         lumi += lumi_dict[y]
     return lumi
