@@ -387,7 +387,8 @@ class histogram_getter:
                 tree.Project(hname, variable, selection)
             else:
                 if self.debug:
-                    print(draw_list[0])
+                    for this_list in draw_list:
+                        print(this_list)
                 MultiDraw(tree, *draw_list)
             for hist in histograms:
                 hist.SetDirectory(0)
