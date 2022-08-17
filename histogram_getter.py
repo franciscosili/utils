@@ -424,7 +424,6 @@ class histogram_getter:
                 dataset_year = '2015+2016+2017+2018'
 
         is_mc = (not 'data' in sample and not 'efake' in sample and not 'jfake' in sample and not 'smr' in sample)
-
         if '+' in dataset_year and not (is_mc and dataset_year == '2015+2016'):
             # if self.year: del self.year
 
@@ -474,14 +473,15 @@ class histogram_getter:
                                                            regions, selections, variables)
 
         else:
+            mc_campaign, _ = get_mccampaign(dataset_year, self.ana_rel)
             datasets = get_datasets(sample, self.paths, self.samples, self.version,
-                                    self.ignore_missing, self.mc_campaign, extra_regex)
+                                    self.ignore_missing, mc_campaign, extra_regex)
 
             histograms = []
             if self.slices and is_mc:
                 histograms_slices = {}
 
-            name_to_show = f'{sample}/{self.mc_campaign}' if is_mc else sample
+            name_to_show = f'{sample}/{mc_campaign}' if is_mc else sample
             
             print('Using samples:')
             for ds in datasets:
