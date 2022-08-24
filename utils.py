@@ -143,13 +143,17 @@ class Value(object):
     #===============================================================================================
     def __truediv__(self, other):
         try:
-            mean = self.mean / other.mean
-        except ZeroDivisionError:
-            mean = 0
-        try:
-            error = mean * math.sqrt((self.error/self.mean)**2 + (other.error/other.mean)**2)
-        except ZeroDivisionError:
-            error = 0
+            try:
+                mean = self.mean / other.mean
+            except ZeroDivisionError:
+                mean = 0
+            try:
+                error = mean * math.sqrt((self.error/self.mean)**2 + (other.error/other.mean)**2)
+            except ZeroDivisionError:
+                error = 0
+        except ArithmeticError:
+            mean = self.mean / other
+            error = self.error / other
 
         return Value(mean, error)
     #===============================================================================================
