@@ -124,6 +124,21 @@ class Value(object):
 
         return Value(mean, error)
     #===============================================================================================
+    
+    #===============================================================================================
+    def __rmul__(self, other):
+        try:
+            mean = self.mean * other.mean
+            try:
+                error = mean * math.sqrt((self.error/self.mean)**2 + (other.error/other.mean)**2)
+            except ZeroDivisionError:
+                error = 0
+        except AttributeError:
+            mean = self.mean * other
+            error = self.error * other
+
+        return Value(mean, error)
+    #===============================================================================================
 
     #===============================================================================================
     def __truediv__(self, other):
