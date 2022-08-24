@@ -42,6 +42,9 @@ def get_mccampaign(year, ana_release):
     elif year == '2018':
         run = 2
         mc_campaign = 'mc16e' if ana_release < 22 else 'mc20e'
+    elif year == '2015+2016+2017+2018' or year == 'Run2':
+        run = 2
+        mc_campaign = 'mc16a+mc16d+mc16e' if ana_release < 22 else 'mc20a+mc20d+mc20e'
     elif year == '2022':
         run = 3
         mc_campaign = 'mc21'
