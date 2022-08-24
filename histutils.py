@@ -384,6 +384,7 @@ def get_histogram_file(fname, hname, debug=True):
         print(f'Histogram name: {hname}')
     
     hist = _infile.Get(hname)
+    # hist_clone = hist.Clone(f'{hist.GetName()}_')
     hist.SetDirectory(0)
     _infile.Close()
     
