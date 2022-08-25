@@ -384,6 +384,7 @@ def get_histogram_file(fname, hname, debug=True):
         print(f'Histogram name: {hname}')
     
     hist = _infile.Get(hname)
+    # hist_clone = hist.Clone(f'{hist.GetName()}_')
     hist.SetDirectory(0)
     _infile.Close()
     
@@ -404,4 +405,23 @@ def get_scale_factor(href, h):
     denom = h.Integral()*href.GetXaxis().GetBinWidth(1)
     if denom == 0: return 1
     return href.Integral()*h.GetXaxis().GetBinWidth(1)/denom
+#===================================================================================================
+
+#===================================================================================================
+def get_first_hist_dict(hist_dict):
+    def _condition(d):
+        try:
+            if first_elem.InheritsFrom('TH1'):
+                return first_elem
+        except:
+            if isinstance(first_elem, dict) or isinstance(first_elem, list):
+                return get_first_hist_dict(first_elem)
+        
+    if isinstance(hist_dict, dict):
+        first_elem = hist_dict[list(hist_dict.keys())[0]]
+        return _condition(first_elem)
+    elif isinstance(hist_dict, list):
+        first_elem = hist_dict[0]
+        return _condition(first_elem)
+    return
 #===================================================================================================

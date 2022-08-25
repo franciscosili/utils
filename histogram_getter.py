@@ -973,16 +973,13 @@ def get_lumi_weight(path, dsid, lumi, fs=None, debug=False):
     sumw       = get_sumw(path)
     xs         = xsutils.get_xs_from_dsid(dsid, fs)
     
-    if debug:
-        print('Luminosity    : ', luminosity)
-        print('Cross section : ', xs)
-        print('Sum of weights: ', sumw)
-    
     try:
         weight = (luminosity * xs) / sumw
     except:
         weight = 0.
-
+    
+    if debug:
+        print('DSID:', dsid, 'Luminosity:', luminosity, 'Cross section:', xs, 'Sum of weights:', sumw, 'Weight:', weight)
     return weight
 #===================================================================================================
 
@@ -993,6 +990,14 @@ def get_lumi(year):
     for y in year.split('+'):
         lumi += lumi_dict[y]
     return lumi
+#===================================================================================================
+
+#===================================================================================================
+def get_comE(year):
+    if year == '2022':
+        return 13.6
+    else:
+        return 13
 #===================================================================================================
 
 
