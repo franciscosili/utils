@@ -367,7 +367,7 @@ class histogram_getter:
             _, _, selection = draw_list[0]
             
             looper = tree_looper(tree, self.looper_func)
-            histograms = looper.loop(presel=selection, lumi_weight=lumi_weight)
+            histograms = looper.loop(presel=selection, dsid=dsid_str, lumi_weight=lumi_weight)
         
         else:
 
