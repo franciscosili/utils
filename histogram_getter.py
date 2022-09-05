@@ -139,7 +139,8 @@ class histogram_getter:
         else:
             df = RT.RDataFrame(self.tree_name, path)
 
-        leaves = df.GetColumnNames()
+        leaves = list(df.GetColumnNames())
+        isvector_leave = ['::RVec' in df.GetColumnType(l) for l in leaves]
         
     
         # Lumi weight is the same for all histograms
@@ -219,6 +220,16 @@ class histogram_getter:
                             variable = '%s_%s' % (variable, syst)
                     
                     
+                    # check for variables in the selection that takes the whole vector
+                    for _sel in split_selection(_selection):
+                        _selvar = split_cut(_sel)[0]
+                        _newvar = f'mask_{get_escaped_variable(_selvar)}'
+                        if _selvar in leaves:
+                            if isvector_leave[leaves.index(_selvar)]:
+                                if _newvar not in df.GetColumnNames():
+                                    df = df.Define(_newvar, _selection).\
+                                            Define(f'pass{_newvar}', f'pass_mask({_newvar})')
+                                _selection = _selection.replace(_sel, f'pass{_newvar}')
                     df_selection = df.Filter(_selection, region)
                     
                     
@@ -369,7 +380,6 @@ class histogram_getter:
         
         else:
             # trigger event loop
-            print('Evaluating loop...')
             if sum_weights:
                 sum_weights[0][1].GetValue()
                 for sumw in sum_weights:
@@ -479,16 +489,17 @@ class histogram_getter:
                     histograms_slices[ds['short_name']] = histograms_ds.GetValue()
 
                 if not histograms:
+                    
                     for hist in histograms_ds:
-                        if hist.InheritsFrom('TH1'):
-                            histograms.append(hist.Clone())
-                        else:
+                        try:
                             histograms.append(hist.GetValue().Clone())
+                        except:
+                            histograms.append(hist.Clone())
                 else:
                     for hall, hnew in zip(histograms, histograms_ds):
-                        if hist.InheritsFrom('TH1'):
+                        try:
                             hall.Add(hnew, 1)
-                        else:
+                        except:
                             hall.Add(hnew.GetValue(), 1)
 
         # Fix histogram name and add overflow bin
