@@ -102,6 +102,8 @@ class histogram_getter:
         if self.vars_cxx:            
             RT.gInterpreter.Declare(self.vars_cxx)
 
+        RT.EnableImplicitMT()
+
         if systs_module:
             import systs_module as systematics_
             self.systematics = systematics_
@@ -132,19 +134,13 @@ class histogram_getter:
 
         # open tree or chain, depending if the path is a directory or if it is a single file
         if os.path.isdir(path):
-            tree = RT.TChain(self.tree_name)
-
             all_files = glob.glob(path+'/*root*')
-            for fpath in all_files:
-                tree.Add(fpath)
+            df        = RT.RDataFrame(self.tree_name, all_files)
         else:
-            file_ = RT.TFile(path, 'read')
-            tree = file_.Get(self.tree_name)
+            df = RT.RDataFrame(self.tree_name, path)
 
-        leaves = []
-        for l in tree.GetListOfLeaves():
-            leaves.append(l.GetName())
-            
+        leaves = df.GetColumnNames()
+        
     
         # Lumi weight is the same for all histograms
         if is_mc:
@@ -172,8 +168,8 @@ class histogram_getter:
         # ----------------------------------------------
         # Create histograms and "tuples" for MultiDraw
         # ----------------------------------------------
-        draw_list  = []
-        histograms = []
+        sum_weights = []
+        histograms  = []
 
         # get a list of selections or regions
         if regions and selections:
@@ -189,47 +185,14 @@ class histogram_getter:
             for ivariable, variable in enumerate(variables):
                 # loop for each systematic
                 for syst in systematics:
-
-                    _selection = selection
-                    systname   = syst.replace('__1down', 'Low').replace('__1up', 'High')
-
-                    # ------- SETUP HISTOGRAMS
-                    # fix_events_by_interval = False
-                    if is_2d_variable(variable):
-                        varx, vary = variable.split(':')
-
-                    # aux variable. In case the variable is coming from a function, check the extra
-                    # variables dictionary
-                    variable_name = variable
-                    if variable not in leaves and 'lumi' not in variable:
-                        variable_name = get_var_function(variable)
                     
-                    # get binning
-                    if binning is None or not binning:
-                        _binning = get_binning(variable_name, self.binning)
-                    else:
-                        _binning = binning[ivariable]
-
-                    # name to avoid the ROOT warning, not used
-                    if self.use_skim:
-                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable_name)}'
-                    elif dsid_str:
-                        hname = f'h___{dsid_str}___{systname}__{region}__{get_escaped_variable(variable_name)}'
-                    else:
-                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable_name)}'
-
-                    # in case we give a 2D variable name, create a 2D histogram
-                    if is_2d_variable(variable):
-                        htemp = RT.TH2D(hname, hname, *_binning)
-                        htemp.Sumw2()
-                    else:
-                        if len(_binning) > 3:
-                            htemp = RT.TH1D(hname, '', len(_binning)-1, array('d', _binning))
-                        else:
-                            htemp = RT.TH1D(hname, '', int(_binning[0]), _binning[1], _binning[2])
-                        htemp.Sumw2()
-
+                    
+                    
                     # ------- SETUP SELECTIONS
+                    _selection = selection                    
+                    systname   = syst.replace('__1down', 'Low').replace('__1up', 'High')
+                    
+                    
                     # MC veto
                     if is_mc and self.use_mcveto:
                         if self.wg_label is None:
@@ -243,18 +206,9 @@ class histogram_getter:
                             dsid = int(dsid_str)
                             _selection = select_truth_slices(dsid, _selection)
 
-                    # if is_smr:
-                    #     _selection += '&& smeared==1 && %s' % self.seed_selection
-
                     # Remove variable from selection if n-1
                     if self.remove_var_cut and variable_name in _selection and variable_name != 'cuts':
                         _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable_name])
-
-                    # if do_remove_var and (':' in variable):
-                    #     if varx in selection:
-                    #         selection = '&&'.join([ cut for cut in selection.split('&&') if not split_cut(cut)[0] == varx ])
-                    #     if vary in selection:
-                    #         selection = '&&'.join([ cut for cut in selection.split('&&') if not split_cut(cut)[0] == vary ])
 
                     # change selection and variable for systematics
                     if syst != 'Nom' and self.systematics.affects_kinematics(syst):
@@ -263,7 +217,14 @@ class histogram_getter:
 
                         if variable in self.systematics.get_affected_variables(syst):
                             variable = '%s_%s' % (variable, syst)
-
+                    
+                    
+                    df_selection = df.Filter(_selection, region)
+                    
+                    
+                    
+                    
+                    
                     # ------- SETUP WEIGHTS
                     w_list = []
                     if is_mc:
@@ -308,10 +269,6 @@ class histogram_getter:
                         # photonjet MET reweighting (not used for the moment)
                         if self.use_phjet_w and is_phjet:
                             w_list.append('weight_ff')
-
-                        # SUSY EWK BR re-weighting
-                        # if self.ggm_br:
-                        #     w_list.append(get_GGM_model_weight(*ggm_br))
                         
                         # Photon ID and Isolation scale factor weights
                         if 'RZ' in self.wg_label:
@@ -338,28 +295,69 @@ class histogram_getter:
                     
                     
                     w_str = '*'.join(w_list) if self.scale and w_list else '1'
+                    
+                    
+                    df_selection_w = df_selection.Define("weight", w_str)
+                    
 
-                    # ------- SETUP DRAW LIST AND ADD HISTOGRAMS
-                    varexp = ''
-                    if _selection.strip() and w_str:
-                        varexp = '(%s)*(%s)' % (_selection, w_str)
-                    elif w_str:
-                        varexp = '(%s)' % (w_str)
-                    elif _selection:
-                        varexp = _selection
-                    elif self.scale:
-                        varexp = w_str
+                    
+                    
+                    
+                    
+                    
+                    # ------- SETUP HISTOGRAMS
+                    # aux variable. In case the variable is coming from a function, check the extra
+                    # variables dictionary
+                    variable_name = variable
+                    if variable not in leaves and 'lumi' not in variable:
+                        variable_name = get_var_function(variable)
+
+                    # get binning
+                    if binning is None or not binning:
+                        _binning = get_binning(variable_name, self.binning)
+                    else:
+                        _binning = binning[ivariable]
+
+                    # name to avoid the ROOT warning, not used
+                    if self.use_skim:
+                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable_name)}'
+                    elif dsid_str:
+                        hname = f'h___{dsid_str}___{systname}__{region}__{get_escaped_variable(variable_name)}'
+                    else:
+                        hname = f'h___{name}___{systname}__{region}__{get_escaped_variable(variable_name)}'
+                    
+                    
+                    
+                    if is_2d_variable(variable):
+                        vx, vy = variable.split(':')
+                        if '[' in vx or ']' in vx:
+                            df_selection_w = df_selection_w.Define(get_escaped_variable(vx), vx)
+                            vx = get_escaped_variable(vx)
+                        if '[' in vy or ']' in vy:
+                            df_selection_w = df_selection_w.Define(get_escaped_variable(vy), vy)
+                            vy = get_escaped_variable(vy)
+                        
+                        htemp = df_selection_w.Histo2D((hname, hname, *_binning), vx, vy, "weight")
+                    else:
+                        if variable == 'cuts':
+                            sumw = df_selection_w.Sum('weight')
+                            sum_weights.append((hname, sumw))                            
+                            continue
+                        
+                        else:
+                            if '[' in variable or ']' in variable:
+                                df_selection_w = df_selection_w.Define(get_escaped_variable(variable), variable)
+                                var_aux = get_escaped_variable(variable)
+                            else:
+                                var_aux = variable
+                                
+                            
+                            if len(_binning) > 3:
+                                htemp = df_selection_w.Histo1D((hname, '', len(_binning)-1, array('d', _binning)), var_aux, "weight")
+                            else:
+                                htemp = df_selection_w.Histo1D((hname, '', int(_binning[0]), _binning[1], _binning[2]), var_aux, "weight")
                     
                     histograms.append(htemp)
-
-                    if variable == 'cuts':
-                        draw_list.append((hname, '1', varexp))
-                    elif variable == 'weights':
-                        draw_list.append((hname, w_str, varexp))
-                    elif variable == 'weight_lumi':
-                        draw_list.append((hname, str(lumi_weight), varexp))
-                    else:
-                        draw_list.append((hname, variable, varexp))
 
 
         if self.looper_func:
@@ -370,36 +368,17 @@ class histogram_getter:
             histograms = looper.loop(presel=selection, dsid=dsid_str, lumi_weight=lumi_weight)
         
         else:
-
-
-            # Use Draw or MutiDraw to project all histograms (for 2D histograms only 1 variable allowed)
-            if len(variables) == 1 and is_2d_variable(variables[0]):
-                hname, variable, selection = draw_list[0]
-                if self.debug:
-                    print(hname, variable, selection)
-
-                variable = '%s:%s' % (vary, varx)
-                tree.Project(hname, variable, selection)
-            elif len(draw_list) == 1:
-                hname, variable, selection = draw_list[0]
-                if self.debug:
-                    print(hname, variable, selection)
-                tree.Project(hname, variable, selection)
+            # trigger event loop
+            print('Evaluating loop...')
+            if sum_weights:
+                sum_weights[0][1].GetValue()
+                for sumw in sum_weights:
+                    htemp = histogram(sumw[0], *get_binning('cuts', self.binning))
+                    htemp.SetBinContent(1, sumw[1].GetValue())
+                    histograms.append(htemp)
             else:
-                if self.debug:
-                    for this_list in draw_list:
-                        print(this_list)
-                MultiDraw(tree, *draw_list)
-            for hist in histograms:
-                hist.SetDirectory(0)
-
-            if os.path.isdir(path):
-                tree.Reset()
-                del tree
-            else:
-                tree.Reset()
-                del tree
-                file_.Close()
+                htemp.GetValue()
+            del df, df_selection, df_selection_w
 
         return histograms
     #===============================================================================================
@@ -497,14 +476,20 @@ class histogram_getter:
                                                            selections, variables, dsid_str=dsid)
 
                 if self.slices and is_mc:
-                    histograms_slices[ds['short_name']] = histograms_ds
+                    histograms_slices[ds['short_name']] = histograms_ds.GetValue()
 
                 if not histograms:
                     for hist in histograms_ds:
-                        histograms.append(hist.Clone())
+                        if hist.InheritsFrom('TH1'):
+                            histograms.append(hist.Clone())
+                        else:
+                            histograms.append(hist.GetValue().Clone())
                 else:
                     for hall, hnew in zip(histograms, histograms_ds):
-                        hall.Add(hnew, 1)
+                        if hist.InheritsFrom('TH1'):
+                            hall.Add(hnew, 1)
+                        else:
+                            hall.Add(hnew.GetValue(), 1)
 
         # Fix histogram name and add overflow bin
         for hist in histograms:
