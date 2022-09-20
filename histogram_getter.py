@@ -23,6 +23,19 @@ lumi_dict = {
     '2022': 0.0,
 }
 
+pass_mask_function = """
+bool pass_mask(ROOT::VecOps::RVec<int> vec){
+    // in case the following line is true, there's at least one element that doesnt pass the mask
+    bool any_not_pass = std::any_of(vec.begin(), vec.end(), [](int i){return i==0;});
+
+    return !any_not_pass;
+}
+"""
+
+
+
+
+
 
 #===================================================================================================
 #===================================================================================================
