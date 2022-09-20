@@ -738,6 +738,18 @@ def split_cut(s):
 #===================================================================================================
 
 #===================================================================================================
+def split_var(variable):
+    variable = variable.strip()
+    
+    for op in ['+', '-', '*', '/']:
+        if op in variable:
+            var1, var2 = variable.split(op)
+            return (var1.strip(), op, var2.strip())
+    
+    return variable
+#===================================================================================================
+
+#===================================================================================================
 def revert_cut(s):
     """Given a cut string, revert the operator
 
@@ -827,15 +839,6 @@ def replace_var(selection, oldvar, newvar):
 #===================================================================================================
 
 #===================================================================================================
-def get_var_function(variable):
-    if variable.split('(')[0] not in ('fabs', 'abs'):
-        return variable.split('(')[0]
-    else:
-        return variable
-#===================================================================================================
-
-
-#===================================================================================================
 #===================================================================================================
 #=====================================      OTHER UTILS
 #===================================================================================================
@@ -881,8 +884,65 @@ def get_skim_path(name, paths, version, mc_campaign=None):
 #===================================================================================================
 
 #===================================================================================================
+def get_var_from_cut(cut):
+    
+    var, _, _ = split_cut(cut)
+    
+    # check if the variable contains multiple subvariables. For example if its something like a+b>=0
+    # in case it contains a +, -, * or /, return the different vars and the operator. In case it doesnt
+    # returns the same variable
+    var = split_var(var)
+    if isinstance(var, tuple):
+        # var was composed of more variables
+        aux_var_list = []
+        for subvar in var:
+            if get_var_function(subvar):
+                aux_var_list.append(get_var_function(subvar))
+            else:
+                aux_var_list.append(subvar)
+        return tuple(aux_var_list)
+    else:
+        if get_var_function(var): var = get_var_function(var)
+        return (var, )
+#===================================================================================================
+
+#===================================================================================================
+def get_var_function(variable):
+    if '(' in variable and variable.split('(', 1)[0] not in ('fabs', 'abs'):
+        return variable.split('(')[0]
+    elif variable.split('(', 1)[0] in ('fabs', 'abs'):
+        return variable
+    else:
+        return None
+#===================================================================================================
+
+#===================================================================================================
 def is_2d_variable(variable):
     return ':' in variable and not '::' in variable
+#===================================================================================================
+
+#===================================================================================================
+def get_2d_variables(variable):
+    if is_2d_variable(variable):
+        return variable.split(':')
+#===================================================================================================
+
+#===================================================================================================
+def is_profile_variable(variable):
+    if 'pro' in variable and variable.endswith(']') and '[' in variable:
+        variable = variable.split('[', 1)[1].rsplit(']', 1)[0]
+        if is_2d_variable(variable):
+            return variable
+    return False
+#===================================================================================================
+
+#===================================================================================================
+def get_profile_variables(variable):
+    variable = is_profile_variable(variable)
+    if variable:
+        vx, vy = get_2d_variables(variable)
+        return vx, vy
+    return None, None
 #===================================================================================================
 
 #===================================================================================================
