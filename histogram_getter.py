@@ -114,8 +114,10 @@ class histogram_getter:
         
         if self.vars_cxx:            
             RT.gInterpreter.Declare(self.vars_cxx)
+        
+        RT.gInterpreter.Declare(pass_mask_function)
 
-        RT.EnableImplicitMT()
+        RT.EnableImplicitMT(4)
 
         if systs_module:
             import systs_module as systematics_
@@ -146,15 +148,25 @@ class histogram_getter:
         # ------------
 
         # open tree or chain, depending if the path is a directory or if it is a single file
-        if os.path.isdir(path):
-            all_files = glob.glob(path+'/*root*')
-            df        = RT.RDataFrame(self.tree_name, all_files)
-        else:
-            df = RT.RDataFrame(self.tree_name, path)
+        if not self.looper_func:
+            if os.path.isdir(path):
+                all_files = glob.glob(path+'/*root*')
+                df        = RT.RDataFrame(self.tree_name, all_files)
+            else:
+                df = RT.RDataFrame(self.tree_name, path)
 
-        leaves = list(df.GetColumnNames())
-        isvector_leave = ['::RVec' in df.GetColumnType(l) for l in leaves]
-        
+            leaves = list(df.GetColumnNames())
+            isvector_leave = ['::RVec' in df.GetColumnType(l) for l in leaves]
+        else:
+            if os.path.isdir(path):
+                all_files = glob.glob(path+'/*root*')
+                tree      = RT.TChain(self.tree_name)
+                for f in all_files:
+                    tree.Add(f)
+            else:
+                tree= RT.TChain(self.tree_name)
+                tree.Add(path)
+
     
         # Lumi weight is the same for all histograms
         if is_mc:
@@ -184,6 +196,7 @@ class histogram_getter:
         # ----------------------------------------------
         sum_weights = []
         histograms  = []
+        loop_presel = []
 
         # get a list of selections or regions
         if regions and selections:
@@ -221,8 +234,8 @@ class histogram_getter:
                             _selection = select_truth_slices(dsid, _selection)
 
                     # Remove variable from selection if n-1
-                    if self.remove_var_cut and variable_name in _selection and variable_name != 'cuts':
-                        _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable_name])
+                    if self.remove_var_cut and variable in _selection and variable != 'cuts':
+                        _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable])
 
                     # change selection and variable for systematics
                     if syst != 'Nom' and self.systematics.affects_kinematics(syst):
@@ -233,19 +246,25 @@ class histogram_getter:
                             variable = '%s_%s' % (variable, syst)
                     
                     
-                    # check for variables in the selection that takes the whole vector
-                    for _sel in split_selection(_selection):
-                        _selvar = split_cut(_sel)[0]
-                        _newvar = f'mask_{get_escaped_variable(_selvar)}'
-                        if _selvar in leaves:
-                            if isvector_leave[leaves.index(_selvar)]:
-                                if _newvar not in df.GetColumnNames():
-                                    df = df.Define(_newvar, _selection).\
-                                            Define(f'pass{_newvar}', f'pass_mask({_newvar})')
-                                _selection = _selection.replace(_sel, f'pass{_newvar}')
-                    df_selection = df.Filter(_selection, region)
-                    
-                    
+                    if not self.looper_func:
+                        # check for variables in the selection that takes the whole vector
+                        for _sel in split_selection(_selection):
+                            if _sel:
+                                _selvar = split_cut(_sel)[0]
+                                _selval = split_cut(_sel)[-1]
+                                _newvar = f'mask_{get_escaped_variable(_selvar)}{_selval}'
+                                if _selvar in leaves and isvector_leave[leaves.index(_selvar)]:
+                                    if _newvar not in df.GetColumnNames():
+                                        df = df.Define(_newvar, _selection).\
+                                                Define(f'pass{_newvar}', f'pass_mask({_newvar})')
+                                    _selection = _selection.replace(_sel, f'pass{_newvar}')
+                        if _selection.strip():
+                            df_selection = df.Filter(_selection, region)
+                        else:
+                            df_selection = df
+                    else:
+                        loop_presel.append(_selection)
+                        continue
                     
                     
                     
@@ -320,7 +339,6 @@ class histogram_getter:
                     
                     w_str = '*'.join(w_list) if self.scale and w_list else '1'
                     
-                    
                     df_selection_w = df_selection.Define("weight", w_str)
                     
 
@@ -332,13 +350,29 @@ class histogram_getter:
                     # ------- SETUP HISTOGRAMS
                     # aux variable. In case the variable is coming from a function, check the extra
                     # variables dictionary
+                    hist_type     = 'histogram'
+                    prof_variable = is_profile_variable(variable)
+                    if prof_variable:
+                        # the form of `variable` is the same as for any 2d histogram    vx:vy
+                        hist_type = 'profile'
+                        variable  = prof_variable
+                    
+                    # name to use in histograms names
                     variable_name = variable
                     if variable not in leaves and 'lumi' not in variable:
-                        variable_name = get_var_function(variable)
+                        # check if variable has the form of a 2d histogram
+                        if is_2d_variable(variable):
+                            vx, vy = get_2d_variables(variable)
+                            vx = get_var_function(vx) if get_var_function(vx) else vx
+                            vy = get_var_function(vy) if get_var_function(vy) else vy
+                            variable_name = vx + ':' + vy
+                        else:
+                            variable_name = get_var_function(variable)
+                    
 
                     # get binning
                     if binning is None or not binning:
-                        _binning = get_binning(variable_name, self.binning)
+                        _binning = get_binning(variable_name, self.binning, hist_type=hist_type)
                     else:
                         _binning = binning[ivariable]
 
@@ -352,41 +386,83 @@ class histogram_getter:
                     
                     
                     
-                    if is_2d_variable(variable):
-                        vx, vy = variable.split(':')
-                        if '[' in vx or ']' in vx:
-                            df_selection_w = df_selection_w.Define(get_escaped_variable(vx), vx)
+                    if is_2d_variable(variable) and hist_type == 'histogram':
+                        vx, vy = get_2d_variables(variable)
+                        if get_var_function(vx):
+                            df_selection_w = df_selection_w.Define(get_var_function(vx), vx)
                             vx = get_escaped_variable(vx)
-                        if '[' in vy or ']' in vy:
-                            df_selection_w = df_selection_w.Define(get_escaped_variable(vy), vy)
+                        else:
+                            if '[' in vx or ']' in vx:   
+                                df_selection_w = df_selection_w.Define(get_escaped_variable(vx), vx)
+                                vx = get_escaped_variable(vx)
+                        if get_var_function(vy):
+                            df_selection_w = df_selection_w.Define(get_var_function(vy), vy)
                             vy = get_escaped_variable(vy)
+                        else:
+                            if '[' in vy or ']' in vy:
+                                df_selection_w = df_selection_w.Define(get_escaped_variable(vy), vy)
+                                vy = get_escaped_variable(vy)
                         
                         htemp = df_selection_w.Histo2D((hname, hname, *_binning), vx, vy, "weight")
                     else:
-                        if variable == 'cuts':
-                            sumw = df_selection_w.Sum('weight')
-                            sum_weights.append((hname, sumw))                            
-                            continue
-                        
-                        else:
-                            if '[' in variable or ']' in variable:
-                                df_selection_w = df_selection_w.Define(get_escaped_variable(variable), variable)
-                                var_aux = get_escaped_variable(variable)
-                            else:
-                                var_aux = variable
-                                
+                        if hist_type == 'histogram':
+                            if variable == 'cuts':
+                                sumw = df_selection_w.Sum('weight')
+                                sum_weights.append((hname, sumw))                            
+                                continue
                             
-                            if len(_binning) > 3:
-                                htemp = df_selection_w.Histo1D((hname, '', len(_binning)-1, array('d', _binning)), var_aux, "weight")
                             else:
-                                htemp = df_selection_w.Histo1D((hname, '', int(_binning[0]), _binning[1], _binning[2]), var_aux, "weight")
+                                if get_var_function(variable) and get_var_function(variable) != variable:
+                                    # means the variable we want to plot is a function to be called
+                                    df_selection_w = df_selection_w.Define(get_var_function(variable), variable)
+                                    var_aux = get_var_function(variable)
+                                else:
+                                    if '[' in variable or ']' in variable:
+                                        df_selection_w = df_selection_w.Define(get_escaped_variable(variable), variable)
+                                        var_aux = get_escaped_variable(variable)
+                                    else:
+                                        var_aux = variable
+                                    
+                                if len(_binning) > 3:
+                                    htemp = df_selection_w.Histo1D((hname, '', len(_binning)-1, array('d', _binning)), var_aux, "weight")
+                                else:
+                                    htemp = df_selection_w.Histo1D((hname, '', int(_binning[0]), _binning[1], _binning[2]), var_aux, "weight")
+                        
+                        elif hist_type == 'profile':
+                            vx, vy = get_2d_variables(variable)
+                            binning_x = _binning[0:3]
+                            binning_y = _binning[3:len(_binning)]
+                            
+                            
+                            if get_var_function(vx):
+                                df_selection_w = df_selection_w.Define(get_var_function(vx), vx)
+                                vx = get_var_function(vx)
+                            else:
+                                if '[' in vx or ']' in vx:
+                                    df_selection_w = df_selection_w.Define(get_escaped_variable(vx), vx)
+                                    vx = get_escaped_variable(vx)
+                            if get_var_function(vy):
+                                df_selection_w = df_selection_w.Define(get_var_function(vy), vy)
+                                vy = get_var_function(vy)
+                            else:
+                                if '[' in vy or ']' in vy:
+                                    df_selection_w = df_selection_w.Define(get_escaped_variable(vy), vy)
+                                    vy = get_escaped_variable(vy)
+                            
+                            if len(binning_x) > 3:
+                                htemp = df_selection_w.Profile1D((hname, '', len(binning_x)-1, array('d', binning_x, *binning_y[1:])),
+                                                                 vx, vy, "weight")
+                            else:
+                                htemp = df_selection_w.Profile1D((hname, '', int(binning_x[0]), binning_x[1], binning_x[2], *binning_y[1:]),
+                                                                 vx, vy, "weight")
+                            
                     
                     histograms.append(htemp)
 
 
         if self.looper_func:
             # in case some preselection was passed, get the cut for the preselection and adding the truth cuts
-            _, _, selection = draw_list[0]
+            selection = loop_presel[0]
             
             looper = tree_looper(tree, self.looper_func)
             histograms = looper.loop(presel=selection, dsid=dsid_str, lumi_weight=lumi_weight)
