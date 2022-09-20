@@ -47,7 +47,7 @@ def get_binning_single_variable(variable, binning_dict):
 #===================================================================================================
 
 #===================================================================================================
-def get_binning(variable, binning_dict):
+def get_binning(variable, binning_dict, hist_type='histogram'):
     """Get the variable for a single variable or a combination of two of them.
 
     Args:
