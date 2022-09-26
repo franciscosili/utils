@@ -10,7 +10,6 @@ from .datasets_manager import get_datasets, get_mccampaign
 from .binningutils import *
 from .histutils import *
 from . import xsutils
-from .multidraw import MultiDraw
 from .utils import Value
 
 
@@ -459,8 +458,8 @@ class histogram_getter:
                             else:
                                 htemp = df_selection_w.Profile1D((hname, '', int(binning_x[0]), binning_x[1], binning_x[2], *binning_y[1:]),
                                                                  vx, vy, "weight")
-                            
-                    
+
+
                     histograms.append(htemp)
 
 
