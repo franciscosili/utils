@@ -211,7 +211,40 @@ class histogram_getter:
             for ivariable, variable in enumerate(variables):
                 # loop for each systematic
                 for syst in systematics:
+                    # ------- SETUP VARIABLE
+                    variable_original = variable
                     
+                    
+                    hist_type      = 'histogram'
+                    # in case the variable is a profile, the variable is like 'profile[varx:vary]'
+                    prof_variable  = is_profile_variable(variable)
+                    hist_class     = 'th1d' if not is_2d_variable(variable) else 'th2d'
+                    
+                    if prof_variable:
+                        # the form of `variable` is the same as for any 2d histogram    vx:vy
+                        hist_type  = 'profile'
+                        hist_class = 'tprofile'
+                        variable   = prof_variable
+                    
+                    # name to use in histograms names and to get binning
+                    variable_name = variable
+                    if variable not in leaves and 'lumi' not in variable:
+                        # check if variable has the form of a 2d histogram
+                        if is_2d_variable(variable):
+                            vx, vy = get_2d_variables(variable)
+                            vx = get_var_function(vx) if get_var_function(vx) else vx
+                            vy = get_var_function(vy) if get_var_function(vy) else vy
+                            variable_name = vx + ':' + vy
+                        else:
+                            if get_var_function(variable):
+                                variable_name = get_var_function(variable)
+                    
+                    
+                    # get binning
+                    if binning is None or not binning:
+                        _binning = get_binning(variable_name, self.binning, hist_type=hist_type)
+                    else:
+                        _binning = binning[ivariable]
                     
                     
                     # ------- SETUP SELECTIONS
@@ -233,9 +266,14 @@ class histogram_getter:
                             _selection = select_truth_slices(dsid, _selection)
 
                     # Remove variable from selection if n-1
-                    if self.remove_var_cut and variable in _selection and variable != 'cuts':
-                        _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable])
-
+                    if self.remove_var_cut:
+                        if is_2d_variable(variable):
+                            for v in get_2d_variables(variable):
+                                if v in _selection:
+                                    _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == v])
+                        elif variable in _selection and variable != 'cuts':
+                            _selection = '&&'.join([cut for cut in _selection.split('&&') if not split_cut(cut)[0] == variable])
+                            
 
                     # change selection and variable for systematics
                     if syst != 'Nom' and self.systematics.affects_kinematics(syst):
@@ -265,7 +303,6 @@ class histogram_getter:
                     else:
                         loop_presel.append(_selection)
                         continue
-                    
                     
                     
                     # ------- SETUP WEIGHTS
@@ -348,37 +385,6 @@ class histogram_getter:
                     
                     
                     # ------- SETUP HISTOGRAMS
-                    # aux variable. In case the variable is coming from a function, check the extra
-                    # variables dictionary
-                    hist_type     = 'histogram'
-                    prof_variable = is_profile_variable(variable)
-                    hist_class    = 'th1d' if not is_2d_variable(variable) else 'th2d'
-                    if prof_variable:
-                        # the form of `variable` is the same as for any 2d histogram    vx:vy
-                        hist_type = 'profile'
-                        hist_class= 'tprofile'
-                        variable  = prof_variable
-                    
-                    # name to use in histograms names and to get binning
-                    variable_name = variable
-                    if variable not in leaves and 'lumi' not in variable:
-                        # check if variable has the form of a 2d histogram
-                        if is_2d_variable(variable):
-                            vx, vy = get_2d_variables(variable)
-                            vx = get_var_function(vx) if get_var_function(vx) else vx
-                            vy = get_var_function(vy) if get_var_function(vy) else vy
-                            variable_name = vx + ':' + vy
-                        else:
-                            if get_var_function(variable):
-                                variable_name = get_var_function(variable)
-                    
-
-                    # get binning
-                    if binning is None or not binning:
-                        _binning = get_binning(variable_name, self.binning, hist_type=hist_type)
-                    else:
-                        _binning = binning[ivariable]
-
                     # name to avoid the ROOT warning, not used
                     if self.use_skim:
                         hname = f'{hist_class}___{name}___{systname}__{region}__{get_escaped_variable(variable_name)}'
@@ -1051,6 +1057,7 @@ def get_escaped_variable(variable):
     variable = variable.replace('.', '_')
     variable = variable.replace('*', '_times_')
     variable = variable.replace('/', '_over_')
+    variable = variable.replace('profile', '')
     return variable
 #===================================================================================================
 
