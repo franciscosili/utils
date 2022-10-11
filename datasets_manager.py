@@ -175,7 +175,8 @@ def get_datasets(name, paths, samples, version=None, ignore_missing=True, mc_cam
             if ignore_missing:
                 continue
             else:
-                raise Exception(f'File not found for ds {ds} with campaign {mc_campaign}. Using version {version}')
+                print(f'File not found for ds {ds} with campaign {mc_campaign}. Using version {version}')
+                # raise Exception(f'File not found for ds {ds} with campaign {mc_campaign}. Using version {version}')
 
         if extra_regex:
             dataset = {
