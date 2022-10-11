@@ -77,7 +77,10 @@ def histogram_equal_to(hist, name=None):
     """    
     if name is None:
         name = hist.GetName()
-    newhist = hist.Clone(name)
+    if hist.InheritsFrom('TGraph'):
+        newhist = hist.GetHistogram()
+    else:
+        newhist = hist.Clone(name)
     newhist.Reset()
     return newhist
 #===================================================================================================
