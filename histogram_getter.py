@@ -375,8 +375,9 @@ class histogram_getter:
                     
                     
                     w_str = '*'.join(w_list) if self.scale and w_list else '1'
-                    
+
                     df_selection_w = df_selection.Define("weight", w_str)
+                    # df_selection_w = df_selection.Define("weight", f"{w_str}<0. ? 0.f : {w_str}")
                     
 
                     
@@ -401,7 +402,7 @@ class histogram_getter:
                             df_selection_w = df_selection_w.Define(get_var_function(vx), vx)
                             vx = get_escaped_variable(vx)
                         else:
-                            if '[' in vx or ']' in vx:   
+                            if '[' in vx or ']' in vx:
                                 df_selection_w = df_selection_w.Define(get_escaped_variable(vx), vx)
                                 vx = get_escaped_variable(vx)
                         if get_var_function(vy):
