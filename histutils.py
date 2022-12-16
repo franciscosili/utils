@@ -99,7 +99,7 @@ def histogram_normalize(hist):
 #===================================================================================================
 
 #===================================================================================================
-def histogram_normalize_to(hist, other, xmin=None, xmax=None):
+def histogram_normalize_to(hist, other, xmin=None, xmax=None, option=''):
     """Normalize histogram to another ones area
 
     Args:
@@ -110,13 +110,13 @@ def histogram_normalize_to(hist, other, xmin=None, xmax=None):
 
     Returns:
         float: normalization factor for which the original hist has been normalized
-    """    
+    """
     if xmin and xmax:
-        n1 = hist.Integral(hist.FindBin(xmin), hist.FindBin(xmax))
-        n2 = other.Integral(other.FindBin(xmin), other.FindBin(xmax))
+        n1 = hist.Integral(hist.FindBin(xmin), hist.FindBin(xmax), option)
+        n2 = other.Integral(other.FindBin(xmin), other.FindBin(xmax), option)
     else:
-        n1 = hist.Integral()
-        n2 = other.Integral()
+        n1 = hist.Integral(option)
+        n2 = other.Integral(option)
     s = n2/n1 if n1 > 0.0 else 1.0
     hist.Scale(s)
     return s
