@@ -5,6 +5,7 @@ import sys
 import ROOT
 import math
 from array import array
+import subprocess
 
 
 #-----------
@@ -27,25 +28,24 @@ def rmdir(path):
 #===================================================================================================
 
 #===================================================================================================
-def run_cmd(cmd, logfile=None, stdout=False):
-
-    print(cmd)
-
+def execute(cmd, logfile=None, stdout=True, append_logfile=False):
+    if stdout: print(f'> {cmd}')
+    sys.stdout.flush() # keeps print and subprocess output in sync
     if stdout and logfile is not None:
-        cmd = '(set -o pipefail ; %s | tee %s)' % (cmd, logfile)
-        
+        cmd_tee = 'tee %s' % logfile
+        if append_logfile:
+            cmd_tee = 'tee -a %s' % logfile
+        cmd = '(set -o pipefail ; %s | %s)' % (cmd, cmd_tee)
     elif logfile is not None:
-        cmd = '%s > %s 2>&1' % (cmd, logfile)
+        if append_logfile:
+            cmd = '%s >> %s 2>&1' % (cmd, logfile)
+        else:
+            cmd = '%s > %s 2>&1' % (cmd, logfile)
 
-    sc = os.system(cmd)
+    sc = subprocess.call(cmd, shell=True)
 
-    # if sc != 0:
-    #     print 'command sc != 0. exiting...'
-    #     sys.exit(1)
-            
     return sc
 #===================================================================================================
-
 
 #===================================================================================================
 class Value(object):
